@@ -1,0 +1,139 @@
+Requirements:
+The google docs link better shows each ID Number with tables and progress trackers.
+Link: https://docs.google.com/document/d/1WtsRjiIoRNmfDbg6_DfExM4QGYVVnyuyFlr2j1Q5Me0/edit?usp=sharing
+
+
+ID number: 497-08 (Repository)
+Type:Look and Feel
+Description A GitHub repository separated into sections based upon the code, the operating system as well as what the code will do. The password policy code will be separate from the audit policy code for both systems.
+Rationale: Completing the foundation gives the motivation to push through and work harder on everything else in the project.
+Fit Criterion: It is the foundation for all the other requirements in this project.
+Priority: This step is already complete and the GitHub repository has been made but the priority would either be first thing completed or one of the last things completed.
+Dependencies: None
+
+ID number: 497-09 (SCAP report)
+Type: Security and Usability
+Description: This is the SCAP report for both systems that tell what the system(s) do correctly according to the Department of Defense’s security policies vs what they do incorrectly.
+Rationale: getting this part complete gets me to the ability to develop the code needed and fill the GitHub repository with working code after the tests are complete.
+Fit Criterion: This allows for Longevity as well as Reliability with safety being the first point from the SCAP report and the DoD’s mission.
+Priority: High priority as this gives me a report that I can present on as well as code everything with exact parameters. Completion halfway there (working on linux SCAP download).
+Dependencies: None
+ID number: 497-10-18
+Type: Usability and performance
+Description: this is the windows code with separation of the code into segments for the firewall, password policies, audit policy, registry editor, windows defender and antivirus, local security policy, windows update services, and the users group and policies hence the place of requirements 10-18. The code will be well documented with comments and should follow the most updated syntax of powershell.
+Rationale: this is a big chunk of the project hence the high requirement count and will take a majority of my time outside of developing the presentation wrapping everything up. The table below will help track progress
+
+Windows Roadmap for SCAP
+ ID Number
+ Status
+ Related files
+ Notes
+497-10 (Firewall)
+ In progress
+ File
+New SCAP report for firewall
+497-11 (Pswd policy)
+ In progress
+ File
+
+
+497-12 (Audit policy)
+ In progress
+ File
+
+
+497-13 (registry editor)
+ Not started
+ File
+
+
+497-14 (windows def)
+ Not started
+ File
+New SCAP report needed
+497-15 (local security policy)
+ In progress
+ File
+
+
+497-16 (WSUS)
+ Not started
+ File
+
+
+497-17 (Users, groups)
+ Not started
+ File
+
+
+497-18 
+(screen settings/firefox)
+ Not started
+ File
+New SCAP report just for screen/search engine
+
+
+
+
+ID number: 497-19-27
+Type: Usability and performance
+Description: this is the linux code that will follow the bash script syntax to allow for ease of use during the project.
+Rationale: this is a big chunk of the project hence the high requirement count and will take a majority of my time outside of developing the presentation wrapping everything up.
+
+Linux Roadmap for SCAP
+ ID Number
+ Status
+ Related files
+ Notes
+497-19 (Firewall)
+ Not started
+ File
+
+
+497-20 (Root/Admin)
+ Not started
+ File
+
+
+497-21 (PSWD policy)
+ Not started
+ File
+
+
+497-22 (Audit policy)
+ Not started
+ File
+
+
+497-23 (Kernels)
+ Not started
+ File
+
+
+497-24 (SSH)
+ Not started
+ File
+
+
+497-25 (Updates)
+ Not started
+ File
+
+
+497-26 (Auditd)
+ Not started
+ File
+
+
+497-27 (SELinux)
+ Not started
+ File
+
+
+
+
+
+ID number 497-99 (Presentation)
+Type: Cultural
+Description: This is the google slides presentation regarding the project itself, any issues in the project as well as ways to circumvent admin privileges in the system(s).
+Rationale: this will put words and pictures into the project allowing for a better understanding of any issues and how they were fixed and how the project was formed.
