@@ -22,6 +22,8 @@ ID number: 497-10-18
 Type: Usability and performance
 Description: this is the windows code with separation of the code into segments for the firewall, password policies, audit policy, registry editor, windows defender and antivirus, local security policy, windows update services, and the users group and policies hence the place of requirements 10-18. The code will be well documented with comments and should follow the most updated syntax of powershell.
 Rationale: this is a big chunk of the project hence the high requirement count and will take a majority of my time outside of developing the presentation wrapping everything up. The table below will help track progress
+Fit Criterion: Reliability and safety critical as it uses the DoD standard with SCAP allowing for a hardened system through the SCAP roadmap below.
+Priority: High as this is the majority of the project.
 
 Windows Roadmap for SCAP
  ID Number
@@ -79,6 +81,8 @@ ID number: 497-19-27
 Type: Usability and performance
 Description: this is the linux code that will follow the bash script syntax to allow for ease of use during the project.
 Rationale: this is a big chunk of the project hence the high requirement count and will take a majority of my time outside of developing the presentation wrapping everything up.
+Fit Criterion: Reliability and safety critical as it uses the DoD standard with SCAP allowing for a hardened system through the SCAP roadmap below.
+Priority: High as this is the majority of the project.
 
 Linux Roadmap for SCAP
  ID Number
