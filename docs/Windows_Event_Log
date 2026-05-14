@@ -1,1 +1,6 @@
-
+# -----------------------------
+# Event Log Sizes
+# -----------------------------
+wevtutil sl Security /ms:1024000000
+wevtutil sl Application /ms:32768000
+wevtutil sl System /ms:32768000
