@@ -37,11 +37,6 @@ reg add "HKLM\SYSTEM\CurrentControlSet\Control\Lsa" /v RestrictAnonymous /t REG_
 reg add "HKLM\SYSTEM\CurrentControlSet\Control\SecurityProviders\WDigest" /v UseLogonCredential /t REG_DWORD /d 0 /f
 
 # -----------------------------
-# Enable DEP OptOut
-# -----------------------------
-bcdedit /set {current} nx OptOut
-
-# -----------------------------
 # Enable SmartScreen
 # -----------------------------
 reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows\System" /v EnableSmartScreen /t REG_DWORD /d 1 /f
