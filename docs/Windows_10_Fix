@@ -1,0 +1,401 @@
+<#
+===========================================================================
+ Windows 10 STIG Full Auto-Remediation Script
+ DISA STIG Benchmark: Windows 10 STIG 003.005
+ Intended Use: SCC / SCAP Compliance Hardening
+ Run As: Administrator
+===========================================================================
+
+ WARNING:
+ - Test in a VM or non-production environment first.
+ - Some settings may impact usability or enterprise workflows.
+ - Reboot REQUIRED after completion.
+ - Some STIG findings still require:
+      * TPM/UEFI/Secure Boot
+      * BitLocker provisioning
+      * Certificate installation
+      * MFA infrastructure
+===========================================================================#
+>
+
+Write-Host ""
+Write-Host "============================================="
+Write-Host " APPLYING WINDOWS 10 STIG BASELINE HARDENING "
+Write-Host "============================================="
+Write-Host ""
+
+# --------------------------------------------------------
+# Helper
+# --------------------------------------------------------
+
+function Set-RegValue {
+    param(
+        [string]$Path,
+        [string]$Name,
+        [string]$Type,
+        $Value
+    )
+
+    if (!(Test-Path $Path)) {
+        New-Item -Path $Path -Force | Out-Null
+    }
+
+    New-ItemProperty `
+        -Path $Path `
+        -Name $Name `
+        -PropertyType $Type `
+        -Value $Value `
+        -Force | Out-Null
+}
+
+# --------------------------------------------------------
+# Disable Insecure Features
+# --------------------------------------------------------
+
+Write-Host "[*] Disabling insecure Windows features..."
+
+Disable-WindowsOptionalFeature -Online -FeatureName MicrosoftWindowsPowerShellV2Root -NoRestart -ErrorAction SilentlyContinue
+Disable-WindowsOptionalFeature -Online -FeatureName SMB1Protocol -NoRestart -ErrorAction SilentlyContinue
+Disable-WindowsOptionalFeature -Online -FeatureName WorkFolders-Client -NoRestart -ErrorAction SilentlyContinue
+
+# --------------------------------------------------------
+# Autoplay / Autorun
+# --------------------------------------------------------
+
+Write-Host "[*] Configuring Autoplay / Autorun..."
+
+Set-RegValue "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer" "NoAutorun" DWord 1
+Set-RegValue "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer" "NoDriveTypeAutoRun" DWord 255
+Set-RegValue "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer" "NoAutoplayfornonVolume" DWord 1
+
+# --------------------------------------------------------
+# Remote Assistance
+# --------------------------------------------------------
+
+Write-Host "[*] Disabling Remote Assistance..."
+
+Set-RegValue "HKLM:\SYSTEM\CurrentControlSet\Control\Remote Assistance" "fAllowToGetHelp" DWord 0
+
+# --------------------------------------------------------
+# DEP
+# --------------------------------------------------------
+
+Write-Host "[*] Enabling DEP..."
+
+bcdedit /set "{current}" nx OptOut
+
+# --------------------------------------------------------
+# WDigest
+# --------------------------------------------------------
+
+Write-Host "[*] Disabling WDigest..."
+
+Set-RegValue "HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\WDigest" "UseLogonCredential" DWord 0
+
+# --------------------------------------------------------
+# WinRM
+# --------------------------------------------------------
+
+Write-Host "[*] Hardening WinRM..."
+
+Set-RegValue "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WinRM\Client" "AllowBasic" DWord 0
+Set-RegValue "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WinRM\Service" "AllowBasic" DWord 0
+Set-RegValue "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WinRM\Client" "AllowDigest" DWord 0
+Set-RegValue "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WinRM\Client" "AllowUnencryptedTraffic" DWord 0
+Set-RegValue "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WinRM\Service" "AllowUnencryptedTraffic" DWord 0
+Set-RegValue "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WinRM\Service" "DisableRunAs" DWord 1
+
+# --------------------------------------------------------
+# NTLM / LSA
+# --------------------------------------------------------
+
+Write-Host "[*] Hardening NTLM / LSA..."
+
+Set-RegValue "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa" "LmCompatibilityLevel" DWord 5
+Set-RegValue "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa" "RestrictAnonymous" DWord 1
+Set-RegValue "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa" "RestrictAnonymousSAM" DWord 1
+Set-RegValue "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa" "EveryoneIncludesAnonymous" DWord 0
+Set-RegValue "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa" "NoLMHash" DWord 1
+Set-RegValue "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa\MSV1_0" "NTLMMinClientSec" DWord 537395200
+Set-RegValue "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa\MSV1_0" "NTLMMinServerSec" DWord 537395200
+
+# --------------------------------------------------------
+# SMB
+# --------------------------------------------------------
+
+Write-Host "[*] Hardening SMB..."
+
+Set-RegValue "HKLM:\SYSTEM\CurrentControlSet\Services\LanmanWorkstation\Parameters" "RequireSecuritySignature" DWord 1
+Set-RegValue "HKLM:\SYSTEM\CurrentControlSet\Services\LanmanServer\Parameters" "RequireSecuritySignature" DWord 1
+Set-RegValue "HKLM:\SYSTEM\CurrentControlSet\Services\LanmanWorkstation\Parameters" "EnableSecuritySignature" DWord 1
+Set-RegValue "HKLM:\SYSTEM\CurrentControlSet\Services\LanmanServer\Parameters" "EnableSecuritySignature" DWord 1
+
+# --------------------------------------------------------
+# UAC
+# --------------------------------------------------------
+
+Write-Host "[*] Configuring UAC..."
+
+$uac = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System"
+
+Set-RegValue $uac "EnableLUA" DWord 1
+Set-RegValue $uac "ConsentPromptBehaviorAdmin" DWord 2
+Set-RegValue $uac "ConsentPromptBehaviorUser" DWord 0
+Set-RegValue $uac "PromptOnSecureDesktop" DWord 1
+Set-RegValue $uac "EnableInstallerDetection" DWord 1
+Set-RegValue $uac "FilterAdministratorToken" DWord 1
+
+# --------------------------------------------------------
+# Password Policies
+# --------------------------------------------------------
+
+Write-Host "[*] Applying password policy..."
+
+net accounts /minpwlen:14
+net accounts /maxpwage:60
+net accounts /minpwage:1
+net accounts /uniquepw:24
+
+# --------------------------------------------------------
+# Account Lockout
+# --------------------------------------------------------
+
+Write-Host "[*] Applying lockout policy..."
+
+net accounts /lockoutthreshold:3
+net accounts /lockoutduration:15
+net accounts /lockoutwindow:15
+
+# --------------------------------------------------------
+# Audit Policy
+# --------------------------------------------------------
+
+Write-Host "[*] Configuring audit policies..."
+
+auditpol /clear
+
+auditpol /set /category:* /success:disable /failure:disable
+
+auditpol /set /subcategory:"Credential Validation" /success:enable /failure:enable
+auditpol /set /subcategory:"Kerberos Authentication Service" /success:enable /failure:enable
+auditpol /set /subcategory:"Kerberos Service Ticket Operations" /success:enable /failure:enable
+auditpol /set /subcategory:"Account Lockout" /failure:enable
+auditpol /set /subcategory:"Group Membership" /success:enable
+auditpol /set /subcategory:"Logon" /success:enable /failure:enable
+auditpol /set /subcategory:"Logoff" /success:enable
+auditpol /set /subcategory:"Special Logon" /success:enable
+auditpol /set /subcategory:"Process Creation" /success:enable
+auditpol /set /subcategory:"Sensitive Privilege Use" /success:enable /failure:enable
+auditpol /set /subcategory:"Audit Policy Change" /success:enable
+auditpol /set /subcategory:"Authentication Policy Change" /success:enable
+auditpol /set /subcategory:"Authorization Policy Change" /success:enable
+auditpol /set /subcategory:"MPSSVC Rule-Level Policy Change" /success:enable /failure:enable
+auditpol /set /subcategory:"Other Policy Change Events" /failure:enable
+auditpol /set /subcategory:"File Share" /success:enable /failure:enable
+auditpol /set /subcategory:"Detailed File Share" /failure:enable
+auditpol /set /subcategory:"Removable Storage" /success:enable /failure:enable
+auditpol /set /subcategory:"Other Object Access Events" /success:enable /failure:enable
+auditpol /set /subcategory:"Security State Change" /success:enable
+auditpol /set /subcategory:"Security System Extension" /success:enable
+auditpol /set /subcategory:"System Integrity" /success:enable /failure:enable
+auditpol /set /subcategory:"IPsec Driver" /failure:enable
+auditpol /set /subcategory:"Other System Events" /success:enable /failure:enable
+auditpol /set /subcategory:"PNP Activity" /success:enable
+
+# --------------------------------------------------------
+# Audit Policy Force Subcategory
+# --------------------------------------------------------
+
+Set-RegValue "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa" "SCENoApplyLegacyAuditPolicy" DWord 1
+
+# --------------------------------------------------------
+# Event Logs
+# --------------------------------------------------------
+
+Write-Host "[*] Configuring event logs..."
+
+wevtutil sl Application /ms:32768000
+wevtutil sl Security /ms:1024000000
+wevtutil sl System /ms:32768000
+
+# --------------------------------------------------------
+# SmartScreen
+# --------------------------------------------------------
+
+Write-Host "[*] Enabling SmartScreen..."
+
+Set-RegValue "HKLM:\SOFTWARE\Policies\Microsoft\Windows\System" "EnableSmartScreen" DWord 1
+Set-RegValue "HKLM:\SOFTWARE\Policies\Microsoft\MicrosoftEdge\PhishingFilter" "EnabledV9" DWord 1
+Set-RegValue "HKLM:\SOFTWARE\Policies\Microsoft\MicrosoftEdge\PhishingFilter" "PreventOverride" DWord 1
+Set-RegValue "HKLM:\SOFTWARE\Policies\Microsoft\MicrosoftEdge\PhishingFilter" "PreventOverrideAppRepUnknown" DWord 1
+
+# --------------------------------------------------------
+# Telemetry
+# --------------------------------------------------------
+
+Write-Host "[*] Disabling telemetry..."
+
+Set-RegValue "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection" "AllowTelemetry" DWord 0
+
+# --------------------------------------------------------
+# Game DVR
+# --------------------------------------------------------
+
+Write-Host "[*] Disabling Game DVR..."
+
+Set-RegValue "HKLM:\SOFTWARE\Policies\Microsoft\Windows\GameDVR" "AllowGameDVR" DWord 0
+
+# --------------------------------------------------------
+# PowerShell Logging
+# --------------------------------------------------------
+
+Write-Host "[*] Enabling PowerShell logging..."
+
+Set-RegValue "HKLM:\SOFTWARE\Policies\Microsoft\Windows\PowerShell\ScriptBlockLogging" "EnableScriptBlockLogging" DWord 1
+Set-RegValue "HKLM:\SOFTWARE\Policies\Microsoft\Windows\PowerShell\Transcription" "EnableTranscripting" DWord 1
+
+# --------------------------------------------------------
+# Disable Convenience PIN
+# --------------------------------------------------------
+
+Write-Host "[*] Disabling convenience PIN..."
+
+Set-RegValue "HKLM:\SOFTWARE\Policies\Microsoft\Windows\System" "AllowDomainPINLogon" DWord 0
+
+# --------------------------------------------------------
+# Screen Lock
+# --------------------------------------------------------
+
+Write-Host "[*] Configuring inactivity timeout..."
+
+Set-RegValue "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" "InactivityTimeoutSecs" DWord 900
+
+# --------------------------------------------------------
+# Legal Banner
+# --------------------------------------------------------
+
+Write-Host "[*] Setting logon banner..."
+
+Set-RegValue "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" "LegalNoticeCaption" String "DoD Notice"
+Set-RegValue "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" "LegalNoticeText" String "You are accessing a U.S. Government information system."
+
+# --------------------------------------------------------
+# Disable Anonymous Enumeration
+# --------------------------------------------------------
+
+Write-Host "[*] Restricting anonymous enumeration..."
+
+Set-RegValue "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa" "RestrictAnonymousSAM" DWord 1
+Set-RegValue "HKLM:\SYSTEM\CurrentControlSet\Services\LanManServer\Parameters" "RestrictNullSessAccess" DWord 1
+
+# --------------------------------------------------------
+# Disable Saved RDP Passwords
+# --------------------------------------------------------
+
+Write-Host "[*] Hardening RDP..."
+
+Set-RegValue "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services" "DisablePasswordSaving" DWord 1
+Set-RegValue "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services" "fPromptForPassword" DWord 1
+Set-RegValue "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services" "fEncryptRPCTraffic" DWord 1
+Set-RegValue "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services" "MinEncryptionLevel" DWord 3
+
+# --------------------------------------------------------
+# Disable HTTP Printing
+# --------------------------------------------------------
+
+Write-Host "[*] Disabling HTTP printing..."
+
+Set-RegValue "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Printers" "DisableHTTPPrinting" DWord 1
+
+# --------------------------------------------------------
+# Disable Web Publishing
+# --------------------------------------------------------
+
+Set-RegValue "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer" "NoWebServices" DWord 1
+
+# --------------------------------------------------------
+# Disable Secondary Logon
+# --------------------------------------------------------
+
+Write-Host "[*] Disabling Secondary Logon..."
+
+sc.exe config seclogon start= disabled
+Stop-Service seclogon -Force -ErrorAction SilentlyContinue
+
+# --------------------------------------------------------
+# Credential Guard / VBS
+# --------------------------------------------------------
+
+Write-Host "[*] Enabling VBS / Credential Guard..."
+
+Set-RegValue "HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard" "EnableVirtualizationBasedSecurity" DWord 1
+Set-RegValue "HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard" "RequirePlatformSecurityFeatures" DWord 1
+Set-RegValue "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa" "LsaCfgFlags" DWord 1
+
+# --------------------------------------------------------
+# Disable Basic Auth RSS
+# --------------------------------------------------------
+
+Set-RegValue "HKLM:\SOFTWARE\Policies\Microsoft\Internet Explorer\Feeds" "AllowBasicAuthInClear" DWord 0
+
+# --------------------------------------------------------
+# Disable Indexing Encrypted Files
+# --------------------------------------------------------
+
+Write-Host "[*] Disabling indexing encrypted files..."
+
+cipher /d /s:c:\
+
+Set-RegValue "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Windows Search" "AllowIndexingEncryptedStoresOrItems" DWord 0
+
+# --------------------------------------------------------
+# Force GP Processing
+# --------------------------------------------------------
+
+Set-RegValue "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Group Policy" "NoGPOListChanges" DWord 0
+
+# --------------------------------------------------------
+# Network Protections
+# --------------------------------------------------------
+
+Write-Host "[*] Hardening networking..."
+
+Set-RegValue "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters" "DisableIPSourceRouting" DWord 2
+Set-RegValue "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip6\Parameters" "DisableIPSourceRouting" DWord 2
+
+# --------------------------------------------------------
+# Disable ICS
+# --------------------------------------------------------
+
+Write-Host "[*] Disabling Internet Connection Sharing..."
+
+Set-Service SharedAccess -StartupType Disabled
+Stop-Service SharedAccess -Force -ErrorAction SilentlyContinue
+
+# --------------------------------------------------------
+# Force GP Update
+# --------------------------------------------------------
+
+Write-Host "[*] Running GPUpdate..."
+
+gpupdate /force
+
+# --------------------------------------------------------
+# Final
+# --------------------------------------------------------
+
+Write-Host ""
+Write-Host "=================================================="
+Write-Host " STIG REMEDIATION COMPLETE "
+Write-Host "=================================================="
+Write-Host ""
+Write-Host "IMPORTANT:"
+Write-Host "1. REBOOT REQUIRED"
+Write-Host "2. Re-run SCC SCAP scan after reboot"
+Write-Host "3. Remaining failures likely require:"
+Write-Host "   - TPM"
+Write-Host "   - BitLocker"
+Write-Host "   - Secure Boot"
+Write-Host "   - DoD Certificates"
+Write-Host "   - MFA / CAC infrastructure"
+Write-Host ""
