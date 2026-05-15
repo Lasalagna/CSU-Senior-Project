@@ -1,0 +1,173 @@
+# ==========================================================
+# Additional STIG Remediation
+# ==========================================================
+
+Write-Host "Applying advanced STIG fixes..."
+
+function Set-RegValue {
+    param($Path,$Name,$Type,$Value)
+
+    if (!(Test-Path $Path)) {
+        New-Item -Path $Path -Force | Out-Null
+    }
+
+    New-ItemProperty `
+        -Path $Path `
+        -Name $Name `
+        -PropertyType $Type `
+        -Value $Value `
+        -Force | Out-Null
+}
+
+# ----------------------------------------------------------
+# Windows Defender
+# ----------------------------------------------------------
+
+Set-MpPreference -DisableRealtimeMonitoring $false
+Set-MpPreference -MAPSReporting Advanced
+Set-MpPreference -SubmitSamplesConsent 1
+Set-MpPreference -PUAProtection Enabled
+
+# ----------------------------------------------------------
+# Firewall
+# ----------------------------------------------------------
+
+Set-NetFirewallProfile -Profile Domain,Public,Private `
+    -Enabled True
+
+Set-NetFirewallProfile -Profile Domain,Public,Private `
+    -DefaultInboundAction Block
+
+# ----------------------------------------------------------
+# Guest Account
+# ----------------------------------------------------------
+
+net user guest /active:no
+
+# ----------------------------------------------------------
+# Rename Administrator (optional)
+# ----------------------------------------------------------
+
+# wmic useraccount where name='Administrator' rename STIGAdmin
+
+# ----------------------------------------------------------
+# Cached Logons
+# ----------------------------------------------------------
+
+Set-RegValue `
+"HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon" `
+"CachedLogonsCount" String "4"
+
+# ----------------------------------------------------------
+# Do not display last username
+# ----------------------------------------------------------
+
+Set-RegValue `
+"HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" `
+"dontdisplaylastusername" DWord 1
+
+# ----------------------------------------------------------
+# Disable Anonymous SID Enumeration
+# ----------------------------------------------------------
+
+Set-RegValue `
+"HKLM:\SYSTEM\CurrentControlSet\Control\Lsa" `
+"TurnOffAnonymousBlock" DWord 1
+
+# ----------------------------------------------------------
+# LDAP Signing
+# ----------------------------------------------------------
+
+Set-RegValue `
+"HKLM:\SYSTEM\CurrentControlSet\Services\LDAP" `
+"LDAPClientIntegrity" DWord 1
+
+# ----------------------------------------------------------
+# Screensaver Lock
+# ----------------------------------------------------------
+
+Set-RegValue `
+"HKCU:\Control Panel\Desktop" `
+"ScreenSaveActive" String "1"
+
+Set-RegValue `
+"HKCU:\Control Panel\Desktop" `
+"ScreenSaverIsSecure" String "1"
+
+Set-RegValue `
+"HKCU:\Control Panel\Desktop" `
+"ScreenSaveTimeOut" String "900"
+
+# ----------------------------------------------------------
+# Disable Solicited Remote Assistance
+# ----------------------------------------------------------
+
+Set-RegValue `
+"HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services" `
+"fAllowToGetHelp" DWord 0
+
+# ----------------------------------------------------------
+# RDP Security
+# ----------------------------------------------------------
+
+Set-RegValue `
+"HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services" `
+"UserAuthentication" DWord 1
+
+Set-RegValue `
+"HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services" `
+"SecurityLayer" DWord 2
+
+# ----------------------------------------------------------
+# Disable SMB Guest Access
+# ----------------------------------------------------------
+
+Set-RegValue `
+"HKLM:\SOFTWARE\Policies\Microsoft\Windows\LanmanWorkstation" `
+"AllowInsecureGuestAuth" DWord 0
+
+# ----------------------------------------------------------
+# TLS Hardening
+# ----------------------------------------------------------
+
+New-Item `
+"HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.0\Server" `
+-Force | Out-Null
+
+Set-RegValue `
+"HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.0\Server" `
+"Enabled" DWord 0
+
+New-Item `
+"HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.1\Server" `
+-Force | Out-Null
+
+Set-RegValue `
+"HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.1\Server" `
+"Enabled" DWord 0
+
+# ----------------------------------------------------------
+# Services
+# ----------------------------------------------------------
+
+$services = @(
+    "XblGameSave",
+    "XboxNetApiSvc",
+    "RemoteRegistry",
+    "WerSvc"
+)
+
+foreach ($svc in $services) {
+    Stop-Service $svc -Force -ErrorAction SilentlyContinue
+    Set-Service $svc -StartupType Disabled -ErrorAction SilentlyContinue
+}
+
+# ----------------------------------------------------------
+# Force GPO Refresh
+# ----------------------------------------------------------
+
+gpupdate /force
+
+Write-Host ""
+Write-Host "Advanced remediation complete."
+Write-Host "REBOOT REQUIRED."
