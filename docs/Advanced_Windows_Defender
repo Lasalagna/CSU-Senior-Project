@@ -1,1 +1,155 @@
+# ============================================================
+# FINAL MICROSOFT DEFENDER STIG REMEDIATION
+# Push 82% -> 90-100%
+# Run as Administrator
+# ============================================================
 
+Write-Host ""
+Write-Host "Applying remaining Defender STIG fixes..." -ForegroundColor Cyan
+
+# ------------------------------------------------------------
+# Create Missing Paths
+# ------------------------------------------------------------
+
+New-Item `
+ -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender\Windows Defender Exploit Guard\ASR\Rules" `
+ -Force | Out-Null
+
+New-Item `
+ -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender\Real-Time Protection" `
+ -Force | Out-Null
+
+New-Item `
+ -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender\MpEngine" `
+ -Force | Out-Null
+
+# ============================================================
+# REMAINING ASR RULES
+# ============================================================
+
+# ------------------------------------------------------------
+# Block WMI persistence
+# GUID: e6db77e5-3df2-4cf1-b95a-636979351e5b
+# ------------------------------------------------------------
+Set-ItemProperty `
+ -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender\Windows Defender Exploit Guard\ASR\Rules" `
+ -Name "e6db77e5-3df2-4cf1-b95a-636979351e5b" `
+ -Value "1" `
+ -Type String
+
+# ------------------------------------------------------------
+# Block Adobe Reader child processes
+# GUID: 7674ba52-37eb-4a4f-a9a1-f0f9a1619a2c
+# ------------------------------------------------------------
+Set-ItemProperty `
+ -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender\Windows Defender Exploit Guard\ASR\Rules" `
+ -Name "7674ba52-37eb-4a4f-a9a1-f0f9a1619a2c" `
+ -Value "1" `
+ -Type String
+
+# ------------------------------------------------------------
+# Block Outlook child processes
+# GUID: 26190899-1602-49e8-8b27-eb1d0a1ce869
+# ------------------------------------------------------------
+Set-ItemProperty `
+ -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender\Windows Defender Exploit Guard\ASR\Rules" `
+ -Name "26190899-1602-49e8-8b27-eb1d0a1ce869" `
+ -Value "1" `
+ -Type String
+
+# ============================================================
+# REAL-TIME PROTECTION SETTINGS
+# ============================================================
+
+# Enable monitoring file/program activity
+Set-ItemProperty `
+ -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender\Real-Time Protection" `
+ -Name "DisableBehaviorMonitoring" `
+ -Value 0 `
+ -Type DWord
+
+# Enable real-time protection
+Set-ItemProperty `
+ -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender\Real-Time Protection" `
+ -Name "DisableRealtimeMonitoring" `
+ -Value 0 `
+ -Type DWord
+
+# Enable process scanning
+Set-ItemProperty `
+ -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender\Real-Time Protection" `
+ -Name "DisableOnAccessProtection" `
+ -Value 0 `
+ -Type DWord
+
+# Enable script scanning
+Set-ItemProperty `
+ -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender\Real-Time Protection" `
+ -Name "DisableScriptScanning" `
+ -Value 0 `
+ -Type DWord
+
+# Enable incoming/outgoing monitoring
+Set-ItemProperty `
+ -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender\Real-Time Protection" `
+ -Name "RealtimeScanDirection" `
+ -Value 0 `
+ -Type DWord
+
+# Enable OOBE protection
+Set-ItemProperty `
+ -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender\Real-Time Protection" `
+ -Name "UILockdown" `
+ -Value 0 `
+ -Type DWord
+
+# ============================================================
+# CLOUD BLOCK LEVEL = HIGH
+# ============================================================
+
+Set-ItemProperty `
+ -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender\MpEngine" `
+ -Name "MpCloudBlockLevel" `
+ -Value 2 `
+ -Type DWord
+
+# ============================================================
+# FORCE DEFENDER SETTINGS
+# ============================================================
+
+Set-MpPreference -DisableRealtimeMonitoring $false
+Set-MpPreference -DisableBehaviorMonitoring $false
+Set-MpPreference -DisableScriptScanning $false
+Set-MpPreference -DisableIOAVProtection $false
+Set-MpPreference -MAPSReporting Advanced
+Set-MpPreference -CloudBlockLevel High
+
+# ============================================================
+# ENABLE ALL ASR RULES AGGRESSIVELY
+# ============================================================
+
+Add-MpPreference -AttackSurfaceReductionRules_Ids `
+ "e6db77e5-3df2-4cf1-b95a-636979351e5b" `
+ -AttackSurfaceReductionRules_Actions Enabled
+
+Add-MpPreference -AttackSurfaceReductionRules_Ids `
+ "7674ba52-37eb-4a4f-a9a1-f0f9a1619a2c" `
+ -AttackSurfaceReductionRules_Actions Enabled
+
+Add-MpPreference -AttackSurfaceReductionRules_Ids `
+ "26190899-1602-49e8-8b27-eb1d0a1ce869" `
+ -AttackSurfaceReductionRules_Actions Enabled
+
+# ============================================================
+# GPUPDATE + SIGNATURE UPDATE
+# ============================================================
+
+gpupdate /force
+
+Update-MpSignature
+
+Write-Host ""
+Write-Host "FINAL Defender remediation applied." -ForegroundColor Green
+Write-Host "REBOOT REQUIRED before SCC rescanning." -ForegroundColor Yellow
+Write-Host ""
+Write-Host "After reboot run SCC again." -ForegroundColor Cyan
