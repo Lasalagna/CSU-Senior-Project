@@ -1,0 +1,271 @@
+# =====================================================================
+# Microsoft Defender Antivirus STIG Remediation Script
+# Based on DISA STIG Findings from SCC Report
+# Run as Administrator
+# =====================================================================
+
+Write-Host "Applying Microsoft Defender Antivirus STIG Settings..." -ForegroundColor Cyan
+
+# ---------------------------------------------------------------------
+# Create Required Registry Paths
+# ---------------------------------------------------------------------
+New-Item -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender" -Force | Out-Null
+New-Item -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender\Spynet" -Force | Out-Null
+New-Item -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender\Real-Time Protection" -Force | Out-Null
+New-Item -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender\Scan" -Force | Out-Null
+New-Item -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender\Signature Updates" -Force | Out-Null
+New-Item -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender\MpEngine" -Force | Out-Null
+
+# ---------------------------------------------------------------------
+# V-213426 - Enable PUA Protection (Block)
+# ---------------------------------------------------------------------
+Set-ItemProperty `
+  -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender" `
+  -Name "PUAProtection" `
+  -Type DWord `
+  -Value 1
+
+# ---------------------------------------------------------------------
+# V-213431 - Enable Automatic Exclusions
+# ---------------------------------------------------------------------
+Set-ItemProperty `
+  -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender" `
+  -Name "DisableAutoExclusions" `
+  -Type DWord `
+  -Value 0
+
+# ---------------------------------------------------------------------
+# V-213433 - Enable Block at First Sight / MAPS Checking
+# ---------------------------------------------------------------------
+Set-ItemProperty `
+  -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender\Spynet" `
+  -Name "DisableBlockAtFirstSeen" `
+  -Type DWord `
+  -Value 0
+
+# ---------------------------------------------------------------------
+# V-213434 - Join Microsoft MAPS
+# 2 = Advanced Membership
+# ---------------------------------------------------------------------
+Set-ItemProperty `
+  -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender\Spynet" `
+  -Name "SpynetReporting" `
+  -Type DWord `
+  -Value 2
+
+# ---------------------------------------------------------------------
+# V-213435 - Send Safe Samples Automatically
+# 1 = Send Safe Samples
+# ---------------------------------------------------------------------
+Set-ItemProperty `
+  -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender\Spynet" `
+  -Name "SubmitSamplesConsent" `
+  -Type DWord `
+  -Value 1
+
+# ---------------------------------------------------------------------
+# V-213449 - Scan Removable Drives
+# ---------------------------------------------------------------------
+Set-ItemProperty `
+  -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender\Scan" `
+  -Name "DisableRemovableDriveScanning" `
+  -Type DWord `
+  -Value 0
+
+# ---------------------------------------------------------------------
+# V-213450 - Weekly Scheduled Scan
+# 1 = Every Sunday
+# 2 = Quick Scan
+# ---------------------------------------------------------------------
+Set-ItemProperty `
+  -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender\Scan" `
+  -Name "ScheduleDay" `
+  -Type DWord `
+  -Value 1
+
+Set-ItemProperty `
+  -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender\Scan" `
+  -Name "ScheduleQuickScanTime" `
+  -Type DWord `
+  -Value 120
+
+# ---------------------------------------------------------------------
+# V-213451 - Enable Email Scanning
+# ---------------------------------------------------------------------
+Set-ItemProperty `
+  -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender\Scan" `
+  -Name "DisableEmailScanning" `
+  -Type DWord `
+  -Value 0
+
+# ---------------------------------------------------------------------
+# V-213452 - Spyware Definitions Age <= 7 Days
+# ---------------------------------------------------------------------
+Set-ItemProperty `
+  -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender\Signature Updates" `
+  -Name "ASSignatureDue" `
+  -Type DWord `
+  -Value 7
+
+# ---------------------------------------------------------------------
+# V-213453 - Virus Definitions Age <= 7 Days
+# ---------------------------------------------------------------------
+Set-ItemProperty `
+  -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender\Signature Updates" `
+  -Name "AVSignatureDue" `
+  -Type DWord `
+  -Value 7
+
+# ---------------------------------------------------------------------
+# V-213454 - Check for Signature Updates Daily
+# ---------------------------------------------------------------------
+Set-ItemProperty `
+  -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender\Signature Updates" `
+  -Name "ScheduleDay" `
+  -Type DWord `
+  -Value 8
+
+# ---------------------------------------------------------------------
+# Threat Default Actions
+# 2 = Quarantine
+# ---------------------------------------------------------------------
+
+# Severe
+Set-ItemProperty `
+  -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender\Threats" `
+  -Name "ThreatSeverityDefaultAction" `
+  -Type DWord `
+  -Value 2 -ErrorAction SilentlyContinue
+
+# ---------------------------------------------------------------------
+# ASR RULES
+# ---------------------------------------------------------------------
+
+New-Item `
+  -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender\Windows Defender Exploit Guard\ASR\Rules" `
+  -Force | Out-Null
+
+# Block executable content from email/webmail
+Set-ItemProperty `
+  -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender\Windows Defender Exploit Guard\ASR\Rules" `
+  -Name "BE9BA2D9-53EA-4CDC-84E5-9B1EEEE46550" `
+  -Type String `
+  -Value "1"
+
+# Block Office child processes
+Set-ItemProperty `
+  -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender\Windows Defender Exploit Guard\ASR\Rules" `
+  -Name "D4F940AB-401B-4EFC-AADC-AD5F3C50688A" `
+  -Type String `
+  -Value "1"
+
+# Block Office executable content
+Set-ItemProperty `
+  -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender\Windows Defender Exploit Guard\ASR\Rules" `
+  -Name "3B576869-A4EC-4529-8536-B80A7769E899" `
+  -Type String `
+  -Value "1"
+
+# Block Office process injection
+Set-ItemProperty `
+  -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender\Windows Defender Exploit Guard\ASR\Rules" `
+  -Name "75668C1F-73B5-4CF0-BB93-3ECF5CB7CC84" `
+  -Type String `
+  -Value "1"
+
+# Block JS/VBS launching executables
+Set-ItemProperty `
+  -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender\Windows Defender Exploit Guard\ASR\Rules" `
+  -Name "D3E037E1-3EB8-44C8-A917-57927947596D" `
+  -Type String `
+  -Value "1"
+
+# Block obfuscated scripts
+Set-ItemProperty `
+  -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender\Windows Defender Exploit Guard\ASR\Rules" `
+  -Name "5BEB7EFE-FD9A-4556-801D-275E5FFC04CC" `
+  -Type String `
+  -Value "1"
+
+# Block Win32 imports from Office macros
+Set-ItemProperty `
+  -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender\Windows Defender Exploit Guard\ASR\Rules" `
+  -Name "92E97FA1-2EDF-4476-BDD6-9DD0B4DDDC7B" `
+  -Type String `
+  -Value "1"
+
+# ---------------------------------------------------------------------
+# Network Protection
+# ---------------------------------------------------------------------
+Set-ItemProperty `
+  -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender\Windows Defender Exploit Guard\Network Protection" `
+  -Name "EnableNetworkProtection" `
+  -Type DWord `
+  -Value 1 -ErrorAction SilentlyContinue
+
+# ---------------------------------------------------------------------
+# Automatic Remediation Levels
+# 2 = Quarantine
+# ---------------------------------------------------------------------
+Set-MpPreference -SevereThreatDefaultAction Quarantine
+Set-MpPreference -HighThreatDefaultAction Quarantine
+Set-MpPreference -ModerateThreatDefaultAction Quarantine
+Set-MpPreference -LowThreatDefaultAction Quarantine
+
+# ---------------------------------------------------------------------
+# Force Defender Signature Update
+# ---------------------------------------------------------------------
+Update-MpSignature
+
+# ---------------------------------------------------------------------
+# Enable Real-Time Monitoring
+# ---------------------------------------------------------------------
+Set-MpPreference -DisableRealtimeMonitoring $false
+
+# ---------------------------------------------------------------------
+# Enable Behavior Monitoring
+# ---------------------------------------------------------------------
+Set-MpPreference -DisableBehaviorMonitoring $false
+
+# ---------------------------------------------------------------------
+# Enable Script Scanning
+# ---------------------------------------------------------------------
+Set-MpPreference -DisableScriptScanning $false
+
+# ---------------------------------------------------------------------
+# Enable IOAV Protection
+# ---------------------------------------------------------------------
+Set-MpPreference -DisableIOAVProtection $false
+
+# ---------------------------------------------------------------------
+# Enable Email Scanning
+# ---------------------------------------------------------------------
+Set-MpPreference -DisableEmailScanning $false
+
+# ---------------------------------------------------------------------
+# Enable Archive Scanning
+# ---------------------------------------------------------------------
+Set-MpPreference -DisableArchiveScanning $false
+
+# ---------------------------------------------------------------------
+# Cloud Protection High
+# ---------------------------------------------------------------------
+Set-MpPreference -MAPSReporting Advanced
+Set-MpPreference -SubmitSamplesConsent SendSafeSamples
+Set-MpPreference -CloudBlockLevel High
+
+# ---------------------------------------------------------------------
+# Enable Controlled Folder Access
+# ---------------------------------------------------------------------
+Set-MpPreference -EnableControlledFolderAccess Enabled
+
+# ---------------------------------------------------------------------
+# Final Status
+# ---------------------------------------------------------------------
+Write-Host ""
+Write-Host "Microsoft Defender STIG remediation applied." -ForegroundColor Green
+Write-Host "REBOOT THE SYSTEM before rescanning with SCC." -ForegroundColor Yellow
+Write-Host ""
+Write-Host "After reboot run:" -ForegroundColor Cyan
+Write-Host "gpupdate /force"
+Write-Host "Update-MpSignature"
