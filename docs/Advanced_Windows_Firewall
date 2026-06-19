@@ -50,6 +50,13 @@ Set-ItemProperty `
     -Type DWord `
     -Value 1
 
+Set-NetFirewallProfile `
+    -Profile Domain `
+    -LogAllowed True `
+    -LogBlocked True `
+    -LogMaxSizeKilobytes 16384 `
+    -LogFileName "%systemroot%\system32\logfiles\firewall\pfirewall.log"
+
 # =====================================================
 # PRIVATE PROFILE
 # =====================================================
@@ -89,6 +96,13 @@ Set-ItemProperty `
     -Name LogSuccessfulConnections `
     -Type DWord `
     -Value 1
+
+Set-NetFirewallProfile `
+    -Profile Private `
+    -LogAllowed True `
+    -LogBlocked True `
+    -LogMaxSizeKilobytes 16384 `
+    -LogFileName "%systemroot%\system32\logfiles\firewall\pfirewall.log"
 
 # =====================================================
 # PUBLIC PROFILE
@@ -141,6 +155,13 @@ Set-ItemProperty `
     -Name LogSuccessfulConnections `
     -Type DWord `
     -Value 1
+
+Set-NetFirewallProfile `
+    -Profile Public `
+    -LogAllowed True `
+    -LogBlocked True `
+    -LogMaxSizeKilobytes 16384 `
+    -LogFileName "%systemroot%\system32\logfiles\firewall\pfirewall.log"
 
 # =====================================================
 # Firewall Logging Files
