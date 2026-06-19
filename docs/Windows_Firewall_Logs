@@ -1,0 +1,35 @@
+# DOMAIN PROFILE
+
+Set-NetFirewallProfile `
+    -Profile Domain `
+    -LogAllowed True `
+    -LogBlocked True `
+    -LogMaxSizeKilobytes 16384 `
+    -LogFileName "%systemroot%\system32\logfiles\firewall\pfirewall.log"
+
+# PRIVATE PROFILE
+
+Set-NetFirewallProfile `
+    -Profile Private `
+    -LogAllowed True `
+    -LogBlocked True `
+    -LogMaxSizeKilobytes 16384 `
+    -LogFileName "%systemroot%\system32\logfiles\firewall\pfirewall.log"
+
+# PUBLIC PROFILE
+
+Set-NetFirewallProfile `
+    -Profile Public `
+    -LogAllowed True `
+    -LogBlocked True `
+    -LogMaxSizeKilobytes 16384 `
+    -LogFileName "%systemroot%\system32\logfiles\firewall\pfirewall.log"
+
+# Ensure log folder exists
+
+New-Item `
+    -ItemType Directory `
+    -Path "C:\Windows\System32\LogFiles\Firewall" `
+    -Force | Out-Null
+
+Restart-Service MpsSvc -Force
