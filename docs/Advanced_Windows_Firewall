@@ -1,1 +1,162 @@
+# =====================================================
+# NIWC / DISA Windows Firewall STIG Remediation
+# Stream: Windows_Firewall_with_Advanced_Security
+# Benchmark: 002.003.008
+# =====================================================
 
+$FWRoot = "HKLM:\SOFTWARE\Policies\Microsoft\WindowsFirewall"
+
+New-Item -Path "$FWRoot\DomainProfile" -Force | Out-Null
+New-Item -Path "$FWRoot\PrivateProfile" -Force | Out-Null
+New-Item -Path "$FWRoot\PublicProfile" -Force | Out-Null
+
+# =====================================================
+# DOMAIN PROFILE
+# =====================================================
+
+Set-ItemProperty `
+    -Path "$FWRoot\DomainProfile" `
+    -Name EnableFirewall `
+    -Type DWord `
+    -Value 1
+
+Set-ItemProperty `
+    -Path "$FWRoot\DomainProfile" `
+    -Name DefaultInboundAction `
+    -Type DWord `
+    -Value 1
+
+Set-ItemProperty `
+    -Path "$FWRoot\DomainProfile" `
+    -Name DefaultOutboundAction `
+    -Type DWord `
+    -Value 0
+
+Set-ItemProperty `
+    -Path "$FWRoot\DomainProfile" `
+    -Name LogFileSize `
+    -Type DWord `
+    -Value 16384
+
+Set-ItemProperty `
+    -Path "$FWRoot\DomainProfile" `
+    -Name LogDroppedPackets `
+    -Type DWord `
+    -Value 1
+
+Set-ItemProperty `
+    -Path "$FWRoot\DomainProfile" `
+    -Name LogSuccessfulConnections `
+    -Type DWord `
+    -Value 1
+
+# =====================================================
+# PRIVATE PROFILE
+# =====================================================
+
+Set-ItemProperty `
+    -Path "$FWRoot\PrivateProfile" `
+    -Name EnableFirewall `
+    -Type DWord `
+    -Value 1
+
+Set-ItemProperty `
+    -Path "$FWRoot\PrivateProfile" `
+    -Name DefaultInboundAction `
+    -Type DWord `
+    -Value 1
+
+Set-ItemProperty `
+    -Path "$FWRoot\PrivateProfile" `
+    -Name DefaultOutboundAction `
+    -Type DWord `
+    -Value 0
+
+Set-ItemProperty `
+    -Path "$FWRoot\PrivateProfile" `
+    -Name LogFileSize `
+    -Type DWord `
+    -Value 16384
+
+Set-ItemProperty `
+    -Path "$FWRoot\PrivateProfile" `
+    -Name LogDroppedPackets `
+    -Type DWord `
+    -Value 1
+
+Set-ItemProperty `
+    -Path "$FWRoot\PrivateProfile" `
+    -Name LogSuccessfulConnections `
+    -Type DWord `
+    -Value 1
+
+# =====================================================
+# PUBLIC PROFILE
+# =====================================================
+
+Set-ItemProperty `
+    -Path "$FWRoot\PublicProfile" `
+    -Name EnableFirewall `
+    -Type DWord `
+    -Value 1
+
+Set-ItemProperty `
+    -Path "$FWRoot\PublicProfile" `
+    -Name DefaultInboundAction `
+    -Type DWord `
+    -Value 1
+
+Set-ItemProperty `
+    -Path "$FWRoot\PublicProfile" `
+    -Name DefaultOutboundAction `
+    -Type DWord `
+    -Value 0
+
+Set-ItemProperty `
+    -Path "$FWRoot\PublicProfile" `
+    -Name AllowLocalPolicyMerge `
+    -Type DWord `
+    -Value 0
+
+Set-ItemProperty `
+    -Path "$FWRoot\PublicProfile" `
+    -Name AllowLocalIPsecPolicyMerge `
+    -Type DWord `
+    -Value 0
+
+Set-ItemProperty `
+    -Path "$FWRoot\PublicProfile" `
+    -Name LogFileSize `
+    -Type DWord `
+    -Value 16384
+
+Set-ItemProperty `
+    -Path "$FWRoot\PublicProfile" `
+    -Name LogDroppedPackets `
+    -Type DWord `
+    -Value 1
+
+Set-ItemProperty `
+    -Path "$FWRoot\PublicProfile" `
+    -Name LogSuccessfulConnections `
+    -Type DWord `
+    -Value 1
+
+# =====================================================
+# Firewall Logging Files
+# =====================================================
+
+New-Item -ItemType Directory `
+    -Path "C:\Windows\System32\LogFiles\Firewall" `
+    -Force | Out-Null
+
+# =====================================================
+# Restart Firewall Service
+# =====================================================
+
+Restart-Service MpsSvc -Force
+
+Write-Host ""
+Write-Host "NIWC Firewall STIG Remediation Applied"
+Write-Host "Rescan SCC to verify compliance."
+Write-Host ""
