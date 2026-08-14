@@ -1,0 +1,47 @@
+#!/bin/bash
+
+source ./common.sh
+
+check_root
+
+info "Ubuntu 24.04 STIG Remediation"
+
+##########################################################
+# Backup critical configuration
+##########################################################
+
+backup_file /etc/ssh/sshd_config
+
+backup_file /etc/login.defs
+
+backup_file /etc/pam.d/common-password
+
+backup_file /etc/pam.d/common-auth
+
+backup_file /etc/pam.d/common-account
+
+backup_file /etc/pam.d/common-session
+
+backup_file /etc/sysctl.conf
+
+backup_file /etc/audit/auditd.conf
+
+backup_file /etc/default/grub
+
+backup_file /etc/fstab
+
+##########################################################
+# Future remediation modules
+##########################################################
+
+# Authentication
+# SSH
+# Audit
+# Kernel
+# Filesystem
+# Network
+# Services
+# AIDE
+# FIPS
+
+finished
