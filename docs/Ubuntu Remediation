@@ -1,0 +1,572 @@
+#!/bin/bash
+
+########################################################################
+# Ubuntu 24.04 LTS DISA STIG
+# PART 2 - AUTHENTICATION & ACCOUNT POLICY
+#
+# Standalone version
+# Does NOT require common.sh
+########################################################################
+
+set -u
+
+########################################################################
+# COLORS
+########################################################################
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+########################################################################
+# VARIABLES
+########################################################################
+
+PWQUALITY="/etc/security/pwquality.conf"
+LOGIN_DEFS="/etc/login.defs"
+
+BACKUP_DIR="/root/ubuntu-stig-backups/part2"
+
+mkdir -p "$BACKUP_DIR"
+
+PASS_COUNT=0
+FAIL_COUNT=0
+WARN_COUNT=0
+
+########################################################################
+# FUNCTIONS
+########################################################################
+
+pass() {
+    echo -e "${GREEN}[PASS]${NC} $1"
+    PASS_COUNT=$((PASS_COUNT + 1))
+}
+
+fail() {
+    echo -e "${RED}[FAIL]${NC} $1"
+    FAIL_COUNT=$((FAIL_COUNT + 1))
+}
+
+warn() {
+    echo -e "${YELLOW}[WARN]${NC} $1"
+    WARN_COUNT=$((WARN_COUNT + 1))
+}
+
+info() {
+    echo -e "${BLUE}[INFO]${NC} $1"
+}
+
+########################################################################
+# ROOT CHECK
+########################################################################
+
+if [ "$EUID" -ne 0 ]; then
+    echo "ERROR: Run this script as root."
+    echo
+    echo "Use:"
+    echo "sudo -i"
+    echo "/root/part2_authentication.sh"
+    exit 1
+fi
+
+########################################################################
+# HEADER
+########################################################################
+
+echo
+echo "============================================================"
+echo " Ubuntu 24.04 DISA STIG - PART 2"
+echo " Authentication & Account Policy Remediation"
+echo "============================================================"
+echo
+
+########################################################################
+# BACKUP
+########################################################################
+
+info "Creating configuration backups..."
+
+if [ -f "$PWQUALITY" ]; then
+    cp -a "$PWQUALITY" "$BACKUP_DIR/pwquality.conf.backup"
+    pass "Backed up $PWQUALITY"
+else
+    touch "$PWQUALITY"
+    chmod 0644 "$PWQUALITY"
+    warn "$PWQUALITY did not exist; created it"
+fi
+
+if [ -f "$LOGIN_DEFS" ]; then
+    cp -a "$LOGIN_DEFS" "$BACKUP_DIR/login.defs.backup"
+    pass "Backed up $LOGIN_DEFS"
+else
+    fail "$LOGIN_DEFS does not exist"
+    exit 1
+fi
+
+if [ -f /etc/pam.d/common-auth ]; then
+    cp -a /etc/pam.d/common-auth \
+        "$BACKUP_DIR/common-auth.backup"
+fi
+
+if [ -f /etc/pam.d/common-password ]; then
+    cp -a /etc/pam.d/common-password \
+        "$BACKUP_DIR/common-password.backup"
+fi
+
+########################################################################
+# FUNCTION - SET PWQUALITY PARAMETER
+########################################################################
+
+set_pwquality() {
+
+    PARAM="$1"
+    VALUE="$2"
+
+    if grep -Eq "^[[:space:]]*${PARAM}[[:space:]]*=" "$PWQUALITY"; then
+
+        sed -i -E \
+        "s|^[[:space:]]*${PARAM}[[:space:]]*=.*|${PARAM}=${VALUE}|" \
+        "$PWQUALITY"
+
+    else
+
+        echo "${PARAM}=${VALUE}" >> "$PWQUALITY"
+
+    fi
+}
+
+########################################################################
+# SV-270726
+# Uppercase character
+########################################################################
+
+echo
+echo "------------------------------------------------------------"
+echo "SV-270726 - Uppercase Character"
+echo "------------------------------------------------------------"
+
+set_pwquality "ucredit" "-1"
+
+if grep -Eq \
+'^[[:space:]]*ucredit[[:space:]]*=[[:space:]]*-1([[:space:]]*#.*)?$' \
+"$PWQUALITY"; then
+
+    pass "Uppercase character requirement configured"
+
+else
+
+    fail "Uppercase character requirement failed"
+
+fi
+
+########################################################################
+# SV-270727
+# Lowercase character
+########################################################################
+
+echo
+echo "------------------------------------------------------------"
+echo "SV-270727 - Lowercase Character"
+echo "------------------------------------------------------------"
+
+set_pwquality "lcredit" "-1"
+
+if grep -Eq \
+'^[[:space:]]*lcredit[[:space:]]*=[[:space:]]*-1([[:space:]]*#.*)?$' \
+"$PWQUALITY"; then
+
+    pass "Lowercase character requirement configured"
+
+else
+
+    fail "Lowercase character requirement failed"
+
+fi
+
+########################################################################
+# SV-270728
+# Numeric character
+########################################################################
+
+echo
+echo "------------------------------------------------------------"
+echo "SV-270728 - Numeric Character"
+echo "------------------------------------------------------------"
+
+set_pwquality "dcredit" "-1"
+
+if grep -Eq \
+'^[[:space:]]*dcredit[[:space:]]*=[[:space:]]*-1([[:space:]]*#.*)?$' \
+"$PWQUALITY"; then
+
+    pass "Numeric character requirement configured"
+
+else
+
+    fail "Numeric character requirement failed"
+
+fi
+
+########################################################################
+# SV-270729
+# Password change difference
+########################################################################
+
+echo
+echo "------------------------------------------------------------"
+echo "SV-270729 - Password Difference"
+echo "------------------------------------------------------------"
+
+set_pwquality "difok" "8"
+
+if grep -Eq \
+'^[[:space:]]*difok[[:space:]]*=[[:space:]]*8([[:space:]]*#.*)?$' \
+"$PWQUALITY"; then
+
+    pass "difok=8 configured"
+
+else
+
+    fail "difok=8 configuration failed"
+
+fi
+
+########################################################################
+# SV-270732
+# Minimum password length
+########################################################################
+
+echo
+echo "------------------------------------------------------------"
+echo "SV-270732 - Minimum Password Length"
+echo "------------------------------------------------------------"
+
+set_pwquality "minlen" "15"
+
+MINLEN=$(awk '
+/^[[:space:]]*minlen[[:space:]]*=/ {
+    value=$0
+    sub(/^[^=]*=/,"",value)
+    gsub(/[[:space:]]/,"",value)
+    print value
+}' "$PWQUALITY" | tail -1)
+
+if [[ "$MINLEN" =~ ^[0-9]+$ ]] && [ "$MINLEN" -ge 15 ]; then
+
+    pass "Minimum password length is $MINLEN"
+
+else
+
+    fail "Minimum password length is not at least 15"
+
+fi
+
+########################################################################
+# SV-270733
+# Special character
+########################################################################
+
+echo
+echo "------------------------------------------------------------"
+echo "SV-270733 - Special Character"
+echo "------------------------------------------------------------"
+
+set_pwquality "ocredit" "-1"
+
+if grep -Eq \
+'^[[:space:]]*ocredit[[:space:]]*=[[:space:]]*-1([[:space:]]*#.*)?$' \
+"$PWQUALITY"; then
+
+    pass "Special character requirement configured"
+
+else
+
+    fail "Special character requirement failed"
+
+fi
+
+########################################################################
+# SV-270730
+# Minimum password lifetime
+########################################################################
+
+echo
+echo "------------------------------------------------------------"
+echo "SV-270730 - Minimum Password Lifetime"
+echo "------------------------------------------------------------"
+
+if grep -Eq \
+'^[[:space:]]*PASS_MIN_DAYS[[:space:]]+' \
+"$LOGIN_DEFS"; then
+
+    sed -i -E \
+    's|^[[:space:]]*PASS_MIN_DAYS[[:space:]]+.*|PASS_MIN_DAYS    1|' \
+    "$LOGIN_DEFS"
+
+else
+
+    echo "PASS_MIN_DAYS    1" >> "$LOGIN_DEFS"
+
+fi
+
+MIN_DAYS=$(awk '
+/^[[:space:]]*PASS_MIN_DAYS[[:space:]]+/ {
+    print $2
+}' "$LOGIN_DEFS" | tail -1)
+
+if [[ "$MIN_DAYS" =~ ^[0-9]+$ ]] && [ "$MIN_DAYS" -ge 1 ]; then
+
+    pass "PASS_MIN_DAYS=$MIN_DAYS"
+
+else
+
+    fail "PASS_MIN_DAYS is not compliant"
+
+fi
+
+########################################################################
+# SV-270731
+# Maximum password lifetime
+########################################################################
+
+echo
+echo "------------------------------------------------------------"
+echo "SV-270731 - Maximum Password Lifetime"
+echo "------------------------------------------------------------"
+
+if grep -Eq \
+'^[[:space:]]*PASS_MAX_DAYS[[:space:]]+' \
+"$LOGIN_DEFS"; then
+
+    sed -i -E \
+    's|^[[:space:]]*PASS_MAX_DAYS[[:space:]]+.*|PASS_MAX_DAYS    60|' \
+    "$LOGIN_DEFS"
+
+else
+
+    echo "PASS_MAX_DAYS    60" >> "$LOGIN_DEFS"
+
+fi
+
+MAX_DAYS=$(awk '
+/^[[:space:]]*PASS_MAX_DAYS[[:space:]]+/ {
+    print $2
+}' "$LOGIN_DEFS" | tail -1)
+
+if [[ "$MAX_DAYS" =~ ^[0-9]+$ ]] && \
+   [ "$MAX_DAYS" -gt 0 ] && \
+   [ "$MAX_DAYS" -le 60 ]; then
+
+    pass "PASS_MAX_DAYS=$MAX_DAYS"
+
+else
+
+    fail "PASS_MAX_DAYS is not compliant"
+
+fi
+
+########################################################################
+# SV-270714
+# Prevent blank/null passwords
+########################################################################
+
+echo
+echo "------------------------------------------------------------"
+echo "SV-270714 - Null Password Protection"
+echo "------------------------------------------------------------"
+
+for PAMFILE in \
+    /etc/pam.d/common-auth \
+    /etc/pam.d/common-password
+do
+
+    if [ -f "$PAMFILE" ]; then
+
+        sed -i -E \
+        's/[[:space:]]+nullok([[:space:]]|$)/\1/g' \
+        "$PAMFILE"
+
+    fi
+
+done
+
+if grep -RInE \
+'(^|[[:space:]])nullok([[:space:]]|$)' \
+/etc/pam.d/common-auth \
+/etc/pam.d/common-password \
+>/dev/null 2>&1; then
+
+    fail "nullok remains in common PAM configuration"
+
+else
+
+    pass "nullok is not present in common PAM configuration"
+
+fi
+
+########################################################################
+# Existing local account password aging
+########################################################################
+
+echo
+echo "------------------------------------------------------------"
+echo "Existing Local Account Password Aging"
+echo "------------------------------------------------------------"
+
+while IFS=: read -r USER _ UID _ _ HOME SHELL
+do
+
+    if [ "$UID" -ge 1000 ] && \
+       [ "$UID" -lt 60000 ] && \
+       [ -d "$HOME" ]; then
+
+        if chage -m 1 -M 60 "$USER" 2>/dev/null; then
+
+            pass "$USER password aging set to minimum 1 / maximum 60"
+
+        else
+
+            warn "Could not modify password aging for $USER"
+
+        fi
+
+    fi
+
+done < /etc/passwd
+
+########################################################################
+# SV-270662
+# SSSD package
+########################################################################
+
+echo
+echo "------------------------------------------------------------"
+echo "SV-270662 - SSSD Package Verification"
+echo "------------------------------------------------------------"
+
+if dpkg-query -W -f='${Status}' sssd 2>/dev/null |
+   grep -q "install ok installed"; then
+
+    pass "SSSD package is installed"
+
+else
+
+    fail "SSSD package is NOT installed"
+
+fi
+
+########################################################################
+# SV-270663
+# SSSD PAM/NSS components
+########################################################################
+
+echo
+echo "------------------------------------------------------------"
+echo "SV-270663 - SSSD PAM/NSS Verification"
+echo "------------------------------------------------------------"
+
+PAM_SSS=0
+NSS_SSS=0
+
+if dpkg-query -W -f='${Status}' libpam-sss 2>/dev/null |
+   grep -q "install ok installed"; then
+
+    PAM_SSS=1
+
+fi
+
+if dpkg-query -W -f='${Status}' libnss-sss 2>/dev/null |
+   grep -q "install ok installed"; then
+
+    NSS_SSS=1
+
+fi
+
+if [ "$PAM_SSS" -eq 1 ] && [ "$NSS_SSS" -eq 1 ]; then
+
+    pass "libpam-sss and libnss-sss are installed"
+
+else
+
+    fail "Required SSSD PAM/NSS components are missing"
+
+fi
+
+########################################################################
+# SSSD SERVICE
+########################################################################
+
+echo
+echo "------------------------------------------------------------"
+echo "SSSD Service Verification"
+echo "------------------------------------------------------------"
+
+if systemctl is-enabled --quiet sssd.service 2>/dev/null; then
+
+    pass "SSSD service is enabled"
+
+else
+
+    warn "SSSD service is not enabled or does not exist"
+
+fi
+
+########################################################################
+# DISPLAY CONFIGURATION
+########################################################################
+
+echo
+echo "============================================================"
+echo " CURRENT PASSWORD CONFIGURATION"
+echo "============================================================"
+
+echo
+echo "/etc/security/pwquality.conf:"
+echo
+
+grep -E \
+'^[[:space:]]*(minlen|difok|ucredit|lcredit|dcredit|ocredit)[[:space:]]*=' \
+"$PWQUALITY" || true
+
+echo
+echo "/etc/login.defs:"
+echo
+
+grep -E \
+'^[[:space:]]*PASS_(MIN|MAX)_DAYS[[:space:]]+' \
+"$LOGIN_DEFS" || true
+
+########################################################################
+# SUMMARY
+########################################################################
+
+echo
+echo "============================================================"
+echo " PART 2 SUMMARY"
+echo "============================================================"
+
+echo -e "${GREEN}PASS: $PASS_COUNT${NC}"
+echo -e "${RED}FAIL: $FAIL_COUNT${NC}"
+echo -e "${YELLOW}WARN: $WARN_COUNT${NC}"
+
+echo
+echo "Backup directory:"
+echo "$BACKUP_DIR"
+
+echo
+echo "============================================================"
+
+if [ "$FAIL_COUNT" -eq 0 ]; then
+
+    echo -e "${GREEN}PART 2 COMPLETED WITHOUT FAILURES${NC}"
+
+else
+
+    echo -e "${RED}PART 2 COMPLETED WITH $FAIL_COUNT FAILURE(S)${NC}"
+
+fi
+
+echo "============================================================"
+echo
