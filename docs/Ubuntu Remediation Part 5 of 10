@@ -1,0 +1,850 @@
+#!/bin/bash
+
+########################################################################
+# Ubuntu 24.04 LTS DISA STIG
+# PART 5
+# ACCOUNT MANAGEMENT & AUDIT RULES
+#
+# Based on findings/remediation instructions from the uploaded
+# Ubuntu 24.04 LTS DISA STIG OpenSCAP report.
+#
+# IMPORTANT:
+# - Creates a backup before changing audit configuration.
+# - Does NOT overwrite existing audit rules.
+# - Adds required STIG rules only when they are missing.
+# - Validates and reloads the rules.
+########################################################################
+
+set -u
+
+########################################################################
+# COLORS
+########################################################################
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+########################################################################
+# VARIABLES
+########################################################################
+
+AUDIT_RULE_DIR="/etc/audit/rules.d"
+STIG_RULE_FILE="$AUDIT_RULE_DIR/stig.rules"
+
+BACKUP_DIR="/root/ubuntu-stig-backups/part5"
+
+PASS_COUNT=0
+FAIL_COUNT=0
+WARN_COUNT=0
+
+########################################################################
+# FUNCTIONS
+########################################################################
+
+pass() {
+    echo -e "${GREEN}[PASS]${NC} $1"
+    PASS_COUNT=$((PASS_COUNT + 1))
+}
+
+fail() {
+    echo -e "${RED}[FAIL]${NC} $1"
+    FAIL_COUNT=$((FAIL_COUNT + 1))
+}
+
+warn() {
+    echo -e "${YELLOW}[WARN]${NC} $1"
+    WARN_COUNT=$((WARN_COUNT + 1))
+}
+
+info() {
+    echo -e "${BLUE}[INFO]${NC} $1"
+}
+
+########################################################################
+# ROOT CHECK
+########################################################################
+
+if [ "$EUID" -ne 0 ]; then
+
+    echo "ERROR: Run this script as root."
+
+    echo
+    echo "Use:"
+    echo "sudo -i"
+    echo "/root/part5_account_audit.sh"
+
+    exit 1
+
+fi
+
+########################################################################
+# HEADER
+########################################################################
+
+echo
+echo "============================================================"
+echo " Ubuntu 24.04 DISA STIG - PART 5"
+echo " ACCOUNT MANAGEMENT & AUDIT RULES"
+echo "============================================================"
+echo
+
+########################################################################
+# CHECK AUDIT PACKAGE
+########################################################################
+
+echo
+echo "------------------------------------------------------------"
+echo "Checking auditd"
+echo "------------------------------------------------------------"
+
+if dpkg-query -W -f='${Status}' auditd 2>/dev/null |
+   grep -q "install ok installed"; then
+
+    pass "auditd is installed"
+
+else
+
+    warn "auditd is not installed"
+
+    info "Installing auditd because the report requires audit rules..."
+
+    if apt-get update && apt-get install -y auditd; then
+
+        pass "auditd installed"
+
+    else
+
+        fail "Unable to install auditd"
+        exit 1
+
+    fi
+
+fi
+
+########################################################################
+# CREATE RULE DIRECTORY
+########################################################################
+
+mkdir -p "$AUDIT_RULE_DIR"
+
+chmod 0755 "$AUDIT_RULE_DIR"
+
+########################################################################
+# BACKUP EXISTING RULES
+########################################################################
+
+echo
+echo "------------------------------------------------------------"
+echo "Backing up audit configuration"
+echo "------------------------------------------------------------"
+
+if [ -f "$STIG_RULE_FILE" ]; then
+
+    cp -a "$STIG_RULE_FILE" \
+        "$BACKUP_DIR/stig.rules.$(date +%Y%m%d_%H%M%S).backup"
+
+    pass "Backed up existing stig.rules"
+
+else
+
+    touch "$STIG_RULE_FILE"
+
+    chmod 0640 "$STIG_RULE_FILE"
+
+    pass "Created new stig.rules"
+
+fi
+
+########################################################################
+# FUNCTION TO ADD AUDIT RULE
+########################################################################
+
+add_rule() {
+
+    RULE="$1"
+    DESCRIPTION="$2"
+
+    if grep -Fqx -- "$RULE" "$STIG_RULE_FILE"; then
+
+        pass "$DESCRIPTION already present"
+
+    else
+
+        echo "$RULE" >> "$STIG_RULE_FILE"
+
+        pass "$DESCRIPTION added"
+
+    fi
+}
+
+########################################################################
+# ACCOUNT FILE AUDITING
+########################################################################
+
+echo
+echo "============================================================"
+echo " ACCOUNT FILE AUDITING"
+echo "============================================================"
+
+########################################################################
+# SV-270684
+########################################################################
+
+add_rule \
+"-w /etc/passwd -p wa -k usergroup_modification" \
+"Audit /etc/passwd"
+
+########################################################################
+# SV-270685
+########################################################################
+
+add_rule \
+"-w /etc/group -p wa -k usergroup_modification" \
+"Audit /etc/group"
+
+########################################################################
+# SV-270686
+########################################################################
+
+add_rule \
+"-w /etc/shadow -p wa -k usergroup_modification" \
+"Audit /etc/shadow"
+
+########################################################################
+# SV-270687
+########################################################################
+
+add_rule \
+"-w /etc/gshadow -p wa -k usergroup_modification" \
+"Audit /etc/gshadow"
+
+########################################################################
+# SV-270688
+########################################################################
+
+if [ -f /etc/opasswd ]; then
+
+    add_rule \
+    "-w /etc/opasswd -p wa -k usergroup_modification" \
+    "Audit /etc/opasswd"
+
+else
+
+    warn "/etc/opasswd does not exist; no rule added"
+
+fi
+
+########################################################################
+# LOGIN FILE AUDITING
+########################################################################
+
+echo
+echo "============================================================"
+echo " LOGIN FILE AUDITING"
+echo "============================================================"
+
+########################################################################
+# UTMP
+########################################################################
+
+if [ -e /var/run/utmp ]; then
+
+    add_rule \
+    "-w /var/run/utmp -p wa -k logins" \
+    "Audit /var/run/utmp"
+
+else
+
+    warn "/var/run/utmp does not exist"
+
+fi
+
+########################################################################
+# WTMP
+########################################################################
+
+if [ -e /var/log/wtmp ]; then
+
+    add_rule \
+    "-w /var/log/wtmp -p wa -k logins" \
+    "Audit /var/log/wtmp"
+
+else
+
+    warn "/var/log/wtmp does not exist"
+
+fi
+
+########################################################################
+# BTMP
+########################################################################
+
+if [ -e /var/log/btmp ]; then
+
+    add_rule \
+    "-w /var/log/btmp -p wa -k logins" \
+    "Audit /var/log/btmp"
+
+else
+
+    warn "/var/log/btmp does not exist"
+
+fi
+
+########################################################################
+# FAILLOG
+########################################################################
+
+if [ -e /var/log/faillog ]; then
+
+    add_rule \
+    "-w /var/log/faillog -p wa -k logins" \
+    "Audit /var/log/faillog"
+
+else
+
+    warn "/var/log/faillog does not exist"
+
+fi
+
+########################################################################
+# SUDO LOG
+########################################################################
+
+if [ -e /var/log/sudo.log ]; then
+
+    add_rule \
+    "-w /var/log/sudo.log -p wa -k maintenance" \
+    "Audit /var/log/sudo.log"
+
+else
+
+    warn "/var/log/sudo.log does not exist"
+
+fi
+
+########################################################################
+# CRON AUDITING
+########################################################################
+
+echo
+echo "============================================================"
+echo " CRON AUDITING"
+echo "============================================================"
+
+if [ -d /etc/cron.d ]; then
+
+    add_rule \
+    "-w /etc/cron.d/ -p wa -k cronjobs" \
+    "Audit /etc/cron.d"
+
+else
+
+    warn "/etc/cron.d does not exist"
+
+fi
+
+if [ -d /var/spool/cron ]; then
+
+    add_rule \
+    "-w /var/spool/cron/ -p wa -k cronjobs" \
+    "Audit /var/spool/cron"
+
+else
+
+    warn "/var/spool/cron does not exist"
+
+fi
+
+########################################################################
+# PRIVILEGED ACCOUNT COMMANDS
+########################################################################
+
+echo
+echo "============================================================"
+echo " PRIVILEGED ACCOUNT COMMAND AUDITING"
+echo "============================================================"
+
+########################################################################
+# CHAGE
+########################################################################
+
+if [ -x /usr/bin/chage ]; then
+
+    add_rule \
+    "-a always,exit -F path=/usr/bin/chage -F perm=x -F auid>=1000 -F auid!=-1 -k privileged-chage" \
+    "Audit chage"
+
+else
+
+    warn "/usr/bin/chage does not exist"
+
+fi
+
+########################################################################
+# USERMOD
+########################################################################
+
+if [ -x /usr/sbin/usermod ]; then
+
+    add_rule \
+    "-a always,exit -F path=/usr/sbin/usermod -F perm=x -F auid>=1000 -F auid!=-1 -k privileged-usermod" \
+    "Audit usermod"
+
+else
+
+    warn "/usr/sbin/usermod does not exist"
+
+fi
+
+########################################################################
+# MODPROBE
+########################################################################
+
+MODPROBE_PATH=""
+
+if [ -x /sbin/modprobe ]; then
+
+    MODPROBE_PATH="/sbin/modprobe"
+
+elif [ -x /usr/sbin/modprobe ]; then
+
+    MODPROBE_PATH="/usr/sbin/modprobe"
+
+fi
+
+if [ -n "$MODPROBE_PATH" ]; then
+
+    add_rule \
+    "-w $MODPROBE_PATH -p x -k modules" \
+    "Audit modprobe"
+
+else
+
+    warn "modprobe executable not found"
+
+fi
+
+########################################################################
+# FDISK
+########################################################################
+
+if [ -x /usr/sbin/fdisk ]; then
+
+    add_rule \
+    "-w /usr/sbin/fdisk -p x -k fdisk" \
+    "Audit fdisk"
+
+else
+
+    warn "/usr/sbin/fdisk does not exist"
+
+fi
+
+########################################################################
+# NONLOCAL MAINTENANCE
+########################################################################
+
+echo
+echo "============================================================"
+echo " NONLOCAL MAINTENANCE AUDITING"
+echo "============================================================"
+
+if [ -e /var/log/sudo.log ]; then
+
+    add_rule \
+    "-w /var/log/sudo.log -p wa -k maintenance" \
+    "Audit sudo maintenance activity"
+
+else
+
+    warn "sudo.log is not present"
+
+fi
+
+########################################################################
+# ACCOUNT INACTIVITY
+########################################################################
+
+echo
+echo "============================================================"
+echo " ACCOUNT INACTIVITY"
+echo "============================================================"
+
+if command -v useradd >/dev/null 2>&1; then
+
+    info "Setting default inactive period to 35 days..."
+
+    if useradd -D -f 35; then
+
+        pass "Default account inactivity period configured to 35 days"
+
+    else
+
+        fail "Unable to configure default account inactivity period"
+
+    fi
+
+else
+
+    fail "useradd command is unavailable"
+
+fi
+
+########################################################################
+# VERIFY /etc/default/useradd
+########################################################################
+
+echo
+echo "------------------------------------------------------------"
+echo "Verifying account inactivity configuration"
+echo "------------------------------------------------------------"
+
+if [ -f /etc/default/useradd ]; then
+
+    INACTIVE=$(awk -F= '
+        /^[[:space:]]*INACTIVE[[:space:]]*=/ {
+            value=$2
+            gsub(/[[:space:]]/, "", value)
+            print value
+        }
+    ' /etc/default/useradd | tail -1)
+
+    echo "INACTIVE=$INACTIVE"
+
+    if [[ "$INACTIVE" =~ ^[0-9]+$ ]] &&
+       [ "$INACTIVE" -ge 0 ] &&
+       [ "$INACTIVE" -le 35 ]; then
+
+        pass "INACTIVE is compliant: $INACTIVE days"
+
+    else
+
+        fail "INACTIVE is not compliant"
+
+    fi
+
+else
+
+    fail "/etc/default/useradd does not exist"
+
+fi
+
+########################################################################
+# AUDIT RULE FILE PERMISSIONS
+########################################################################
+
+echo
+echo "============================================================"
+echo " AUDIT RULE FILE"
+echo "============================================================"
+
+chown root:root "$STIG_RULE_FILE"
+chmod 0640 "$STIG_RULE_FILE"
+
+OWNER=$(stat -c '%U' "$STIG_RULE_FILE")
+GROUP=$(stat -c '%G' "$STIG_RULE_FILE")
+MODE=$(stat -c '%a' "$STIG_RULE_FILE")
+
+echo
+echo "File : $STIG_RULE_FILE"
+echo "Owner: $OWNER"
+echo "Group: $GROUP"
+echo "Mode : $MODE"
+
+if [ "$OWNER" = "root" ]; then
+
+    pass "stig.rules is owned by root"
+
+else
+
+    fail "stig.rules is not owned by root"
+
+fi
+
+if [ "$GROUP" = "root" ]; then
+
+    pass "stig.rules is group-owned by root"
+
+else
+
+    fail "stig.rules is not group-owned by root"
+
+fi
+
+########################################################################
+# VALIDATE AUDIT RULES
+########################################################################
+
+echo
+echo "============================================================"
+echo " VALIDATING AUDIT RULES"
+echo "============================================================"
+
+if command -v augenrules >/dev/null 2>&1; then
+
+    if augenrules --check; then
+
+        pass "augenrules validation completed"
+
+    else
+
+        fail "augenrules validation reported an error"
+
+    fi
+
+else
+
+    fail "augenrules command is unavailable"
+
+fi
+
+########################################################################
+# LOAD AUDIT RULES
+########################################################################
+
+echo
+echo "============================================================"
+echo " LOADING AUDIT RULES"
+echo "============================================================"
+
+if augenrules --load; then
+
+    pass "Audit rules loaded successfully"
+
+else
+
+    fail "Audit rules failed to load"
+
+fi
+
+########################################################################
+# VERIFY AUDIT SERVICE
+########################################################################
+
+echo
+echo "============================================================"
+echo " AUDIT SERVICE"
+echo "============================================================"
+
+if systemctl enable auditd.service >/dev/null 2>&1; then
+
+    pass "auditd is enabled"
+
+else
+
+    warn "Could not enable auditd"
+
+fi
+
+if systemctl is-active --quiet auditd.service; then
+
+    pass "auditd is active"
+
+else
+
+    warn "auditd is not currently active"
+
+fi
+
+########################################################################
+# VERIFY REQUIRED RULES
+########################################################################
+
+echo
+echo "============================================================"
+echo " VERIFYING REQUIRED AUDIT RULES"
+echo "============================================================"
+
+ACTIVE_RULES=$(auditctl -l 2>/dev/null || true)
+
+verify_rule() {
+
+    RULE="$1"
+    DESCRIPTION="$2"
+
+    if printf '%s\n' "$ACTIVE_RULES" |
+       grep -Fqx -- "$RULE"; then
+
+        pass "$DESCRIPTION is active"
+
+    else
+
+        fail "$DESCRIPTION is NOT active"
+
+    fi
+}
+
+########################################################################
+# ACCOUNT FILES
+########################################################################
+
+verify_rule \
+"-w /etc/passwd -p wa -k usergroup_modification" \
+"/etc/passwd audit"
+
+verify_rule \
+"-w /etc/group -p wa -k usergroup_modification" \
+"/etc/group audit"
+
+verify_rule \
+"-w /etc/shadow -p wa -k usergroup_modification" \
+"/etc/shadow audit"
+
+verify_rule \
+"-w /etc/gshadow -p wa -k usergroup_modification" \
+"/etc/gshadow audit"
+
+########################################################################
+# LOGIN FILES
+########################################################################
+
+if [ -e /var/run/utmp ]; then
+
+    verify_rule \
+    "-w /var/run/utmp -p wa -k logins" \
+    "/var/run/utmp audit"
+
+fi
+
+if [ -e /var/log/wtmp ]; then
+
+    verify_rule \
+    "-w /var/log/wtmp -p wa -k logins" \
+    "/var/log/wtmp audit"
+
+fi
+
+if [ -e /var/log/btmp ]; then
+
+    verify_rule \
+    "-w /var/log/btmp -p wa -k logins" \
+    "/var/log/btmp audit"
+
+fi
+
+if [ -e /var/log/faillog ]; then
+
+    verify_rule \
+    "-w /var/log/faillog -p wa -k logins" \
+    "/var/log/faillog audit"
+
+fi
+
+########################################################################
+# CRON
+########################################################################
+
+if [ -d /etc/cron.d ]; then
+
+    verify_rule \
+    "-w /etc/cron.d/ -p wa -k cronjobs" \
+    "/etc/cron.d audit"
+
+fi
+
+if [ -d /var/spool/cron ]; then
+
+    verify_rule \
+    "-w /var/spool/cron/ -p wa -k cronjobs" \
+    "/var/spool/cron audit"
+
+fi
+
+########################################################################
+# PRIVILEGED COMMANDS
+########################################################################
+
+if [ -x /usr/bin/chage ]; then
+
+    verify_rule \
+    "-a always,exit -F path=/usr/bin/chage -F perm=x -F auid>=1000 -F auid!=-1 -k privileged-chage" \
+    "chage audit"
+
+fi
+
+if [ -x /usr/sbin/usermod ]; then
+
+    verify_rule \
+    "-a always,exit -F path=/usr/sbin/usermod -F perm=x -F auid>=1000 -F auid!=-1 -k privileged-usermod" \
+    "usermod audit"
+
+fi
+
+########################################################################
+# MODPROBE
+########################################################################
+
+if [ -n "$MODPROBE_PATH" ]; then
+
+    verify_rule \
+    "-w $MODPROBE_PATH -p x -k modules" \
+    "modprobe audit"
+
+fi
+
+########################################################################
+# FDISK
+########################################################################
+
+if [ -x /usr/sbin/fdisk ]; then
+
+    verify_rule \
+    "-w /usr/sbin/fdisk -p x -k fdisk" \
+    "fdisk audit"
+
+fi
+
+########################################################################
+# DISPLAY ACTIVE RULES
+########################################################################
+
+echo
+echo "============================================================"
+echo " ACTIVE STIG AUDIT RULES"
+echo "============================================================"
+
+auditctl -l 2>/dev/null |
+grep -E \
+'(/etc/passwd|/etc/group|/etc/shadow|/etc/gshadow|/etc/opasswd|/var/run/utmp|/var/log/wtmp|/var/log/btmp|/var/log/faillog|/var/log/sudo.log|cron|chage|usermod|modprobe|fdisk)' \
+|| true
+
+########################################################################
+# SUMMARY
+########################################################################
+
+echo
+echo "============================================================"
+echo " PART 5 SUMMARY"
+echo "============================================================"
+
+echo -e "${GREEN}PASS: $PASS_COUNT${NC}"
+echo -e "${RED}FAIL: $FAIL_COUNT${NC}"
+echo -e "${YELLOW}WARN: $WARN_COUNT${NC}"
+
+echo
+echo "Backup directory:"
+echo "$BACKUP_DIR"
+
+echo
+echo "Audit rule file:"
+echo "$STIG_RULE_FILE"
+
+echo
+echo "============================================================"
+
+if [ "$FAIL_COUNT" -eq 0 ]; then
+
+    echo -e "${GREEN}PART 5 COMPLETED WITHOUT FAILURES${NC}"
+
+else
+
+    echo -e "${RED}PART 5 COMPLETED WITH $FAIL_COUNT FAILURE(S)${NC}"
+
+fi
+
+echo "============================================================"
+echo
