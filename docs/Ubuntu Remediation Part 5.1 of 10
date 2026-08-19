@@ -1,0 +1,243 @@
+#!/bin/bash
+
+set -u
+
+RULE_FILE="/etc/audit/rules.d/stig.rules"
+BACKUP_DIR="/root/ubuntu-stig-backups/part5"
+
+mkdir -p "$BACKUP_DIR"
+
+echo
+echo "============================================================"
+echo " PART 5 - FIXING REMAINING AUDIT RULES"
+echo "============================================================"
+echo
+
+# ------------------------------------------------------------
+# Backup
+# ------------------------------------------------------------
+
+cp -a "$RULE_FILE" \
+    "$BACKUP_DIR/stig.rules.before-part5-fix.$(date +%Y%m%d_%H%M%S)" \
+    2>/dev/null || true
+
+echo "[PASS] Audit rule configuration backed up"
+
+# ------------------------------------------------------------
+# /etc/cron.d
+# ------------------------------------------------------------
+
+if ! grep -Eq '^[[:space:]]*-w[[:space:]]+/etc/cron\.d/?([[:space:]]|$)' "$RULE_FILE"; then
+
+    echo "-w /etc/cron.d/ -p wa -k cronjobs" >> "$RULE_FILE"
+
+    echo "[FIXED] /etc/cron.d audit rule added"
+
+else
+
+    echo "[OK] /etc/cron.d audit rule already exists"
+
+fi
+
+# ------------------------------------------------------------
+# /var/spool/cron
+# ------------------------------------------------------------
+
+if ! grep -Eq '^[[:space:]]*-w[[:space:]]+/var/spool/cron/?([[:space:]]|$)' "$RULE_FILE"; then
+
+    echo "-w /var/spool/cron/ -p wa -k cronjobs" >> "$RULE_FILE"
+
+    echo "[FIXED] /var/spool/cron audit rule added"
+
+else
+
+    echo "[OK] /var/spool/cron audit rule already exists"
+
+fi
+
+# ------------------------------------------------------------
+# /usr/bin/chage
+#
+# Exact remediation from the uploaded report.
+# ------------------------------------------------------------
+
+if ! grep -Eq \
+'^[[:space:]]*-a[[:space:]]+(always,exit|exit,always).*path=/usr/bin/chage.*perm=x.*auid>=1000.*auid!=-1' \
+"$RULE_FILE"; then
+
+    echo "-a always,exit -F path=/usr/bin/chage -F perm=x -F auid>=1000 -F auid!=-1 -k privileged-chage" \
+        >> "$RULE_FILE"
+
+    echo "[FIXED] chage audit rule added"
+
+else
+
+    echo "[OK] chage audit rule already exists"
+
+fi
+
+# ------------------------------------------------------------
+# /usr/sbin/usermod
+#
+# Exact remediation from the uploaded report.
+# ------------------------------------------------------------
+
+if ! grep -Eq \
+'^[[:space:]]*-a[[:space:]]+(always,exit|exit,always).*path=/usr/sbin/usermod.*perm=x.*auid>=1000.*auid!=-1' \
+"$RULE_FILE"; then
+
+    echo "-a always,exit -F path=/usr/sbin/usermod -F perm=x -F auid>=1000 -F auid!=-1 -k privileged-usermod" \
+        >> "$RULE_FILE"
+
+    echo "[FIXED] usermod audit rule added"
+
+else
+
+    echo "[OK] usermod audit rule already exists"
+
+fi
+
+# ------------------------------------------------------------
+# Ownership and permissions
+# ------------------------------------------------------------
+
+chown root:root "$RULE_FILE"
+chmod 0640 "$RULE_FILE"
+
+echo
+echo "[PASS] $RULE_FILE ownership and permissions configured"
+
+# ------------------------------------------------------------
+# Show rules before loading
+# ------------------------------------------------------------
+
+echo
+echo "============================================================"
+echo " RULES IN /etc/audit/rules.d/stig.rules"
+echo "============================================================"
+
+grep -E \
+'(/etc/cron\.d|/var/spool/cron|/usr/bin/chage|/usr/sbin/usermod)' \
+"$RULE_FILE" || true
+
+# ------------------------------------------------------------
+# Validate
+# ------------------------------------------------------------
+
+echo
+echo "============================================================"
+echo " VALIDATING AUDIT RULES"
+echo "============================================================"
+
+if augenrules --check; then
+
+    echo "[PASS] augenrules validation successful"
+
+else
+
+    echo "[FAIL] augenrules validation failed"
+    exit 1
+
+fi
+
+# ------------------------------------------------------------
+# Load
+# ------------------------------------------------------------
+
+echo
+echo "============================================================"
+echo " LOADING AUDIT RULES"
+echo "============================================================"
+
+if augenrules --load; then
+
+    echo "[PASS] Audit rules loaded"
+
+else
+
+    echo "[FAIL] Audit rules failed to load"
+    exit 1
+
+fi
+
+# ------------------------------------------------------------
+# Verify generated audit.rules
+# ------------------------------------------------------------
+
+echo
+echo "============================================================"
+echo " VERIFYING /etc/audit/audit.rules"
+echo "============================================================"
+
+if grep -Eq \
+'^[[:space:]]*-w[[:space:]]+/etc/cron\.d/?([[:space:]]|$)' \
+/etc/audit/audit.rules; then
+
+    echo "[PASS] /etc/cron.d rule is in /etc/audit/audit.rules"
+
+else
+
+    echo "[FAIL] /etc/cron.d rule NOT found in /etc/audit/audit.rules"
+
+fi
+
+if grep -Eq \
+'^[[:space:]]*-w[[:space:]]+/var/spool/cron/?([[:space:]]|$)' \
+/etc/audit/audit.rules; then
+
+    echo "[PASS] /var/spool/cron rule is in /etc/audit/audit.rules"
+
+else
+
+    echo "[FAIL] /var/spool/cron rule NOT found in /etc/audit/audit.rules"
+
+fi
+
+if grep -Eq \
+'^[[:space:]]*-a[[:space:]]+(always,exit|exit,always).*path=/usr/bin/chage.*perm=x.*auid>=1000.*auid!=(4294967295|-1|unset)' \
+/etc/audit/audit.rules; then
+
+    echo "[PASS] chage rule is in /etc/audit/audit.rules"
+
+else
+
+    echo "[FAIL] chage rule NOT found in /etc/audit/audit.rules"
+
+fi
+
+if grep -Eq \
+'^[[:space:]]*-a[[:space:]]+(always,exit|exit,always).*path=/usr/sbin/usermod.*perm=x.*auid>=1000.*auid!=(4294967295|-1|unset)' \
+/etc/audit/audit.rules; then
+
+    echo "[PASS] usermod rule is in /etc/audit/audit.rules"
+
+else
+
+    echo "[FAIL] usermod rule NOT found in /etc/audit/audit.rules"
+
+fi
+
+# ------------------------------------------------------------
+# Show active kernel rules
+# ------------------------------------------------------------
+
+echo
+echo "============================================================"
+echo " ACTIVE AUDIT RULES"
+echo "============================================================"
+
+auditctl -l 2>/dev/null | grep -E \
+'(/etc/cron\.d|/var/spool/cron|/usr/bin/chage|/usr/sbin/usermod)' \
+|| true
+
+# ------------------------------------------------------------
+# Final
+# ------------------------------------------------------------
+
+echo
+echo "============================================================"
+echo " PART 5 FIX COMPLETE"
+echo "============================================================"
+echo
+echo "If all four items above show [PASS], run a new SCAP scan."
+echo
