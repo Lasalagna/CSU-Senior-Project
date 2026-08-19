@@ -1,0 +1,636 @@
+#!/bin/bash
+
+########################################################################
+# Ubuntu 24.04 LTS DISA STIG
+# PART 4 - FILESYSTEM, LOG & AUDIT PERMISSIONS
+#
+# Based on findings in the uploaded Ubuntu 24.04 LTS OpenSCAP report.
+#
+# IMPORTANT:
+# - Backups are created before changes.
+# - Passing library/system-command checks are NOT modified.
+# - /var/log exceptions from the STIG are preserved.
+########################################################################
+
+set -u
+
+########################################################################
+# COLORS
+########################################################################
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+########################################################################
+# VARIABLES
+########################################################################
+
+BACKUP_DIR="/root/ubuntu-stig-backups/part4"
+
+PASS_COUNT=0
+FAIL_COUNT=0
+WARN_COUNT=0
+
+mkdir -p "$BACKUP_DIR"
+
+########################################################################
+# FUNCTIONS
+########################################################################
+
+pass() {
+    echo -e "${GREEN}[PASS]${NC} $1"
+    PASS_COUNT=$((PASS_COUNT + 1))
+}
+
+fail() {
+    echo -e "${RED}[FAIL]${NC} $1"
+    FAIL_COUNT=$((FAIL_COUNT + 1))
+}
+
+warn() {
+    echo -e "${YELLOW}[WARN]${NC} $1"
+    WARN_COUNT=$((WARN_COUNT + 1))
+}
+
+info() {
+    echo -e "${BLUE}[INFO]${NC} $1"
+}
+
+########################################################################
+# ROOT CHECK
+########################################################################
+
+if [ "$EUID" -ne 0 ]; then
+
+    echo "ERROR: Run this script as root."
+
+    echo
+    echo "Use:"
+    echo "sudo -i"
+    echo "/root/part4_filesystem.sh"
+
+    exit 1
+
+fi
+
+########################################################################
+# HEADER
+########################################################################
+
+echo
+echo "============================================================"
+echo " Ubuntu 24.04 DISA STIG - PART 4"
+echo " FILESYSTEM, LOG & AUDIT PERMISSIONS"
+echo "============================================================"
+echo
+
+########################################################################
+# BACKUP /var/log PERMISSIONS
+########################################################################
+
+info "Saving current /var/log permissions..."
+
+find /var/log -type f -printf '%m %u %g %p\n' \
+    > "$BACKUP_DIR/var_log_permissions_before.txt" 2>/dev/null
+
+pass "Saved /var/log permission inventory"
+
+########################################################################
+# /var/log FILE PERMISSIONS
+#
+# Report remediation:
+# chmod 640 for applicable files.
+#
+# Exclusions:
+# btmp
+# wtmp
+# lastlog
+# history
+# eipp.log.xz
+########################################################################
+
+echo
+echo "------------------------------------------------------------"
+echo " /var/log FILE PERMISSIONS"
+echo "------------------------------------------------------------"
+
+info "Finding /var/log files that are more permissive than 640..."
+
+BAD_LOG_FILES=$(find /var/log \
+    -type f \
+    -perm /137 \
+    ! -name '*[bw]tmp' \
+    ! -name '*lastlog' \
+    ! -name '*history*' \
+    ! -name 'eipp.log.xz' \
+    2>/dev/null)
+
+if [ -n "$BAD_LOG_FILES" ]; then
+
+    echo
+    echo "Files requiring remediation:"
+    echo "$BAD_LOG_FILES"
+    echo
+
+    info "Changing applicable log files to mode 640..."
+
+    while IFS= read -r FILE
+    do
+
+        [ -z "$FILE" ] && continue
+
+        chmod 640 "$FILE"
+
+    done <<< "$BAD_LOG_FILES"
+
+else
+
+    info "No applicable log files require permission changes."
+
+fi
+
+########################################################################
+# VERIFY /var/log
+########################################################################
+
+REMAINING_BAD_LOGS=$(find /var/log \
+    -type f \
+    -perm /137 \
+    ! -name '*[bw]tmp' \
+    ! -name '*lastlog' \
+    ! -name '*history*' \
+    ! -name 'eipp.log.xz' \
+    2>/dev/null)
+
+if [ -z "$REMAINING_BAD_LOGS" ]; then
+
+    pass "Applicable /var/log files are mode 640 or more restrictive"
+
+else
+
+    fail "Some /var/log files remain more permissive than 640"
+
+    echo "$REMAINING_BAD_LOGS"
+
+fi
+
+########################################################################
+# AUDIT LOG LOCATION
+########################################################################
+
+echo
+echo "------------------------------------------------------------"
+echo " AUDIT LOG OWNERSHIP"
+echo "------------------------------------------------------------"
+
+if [ -f /etc/audit/auditd.conf ]; then
+
+    AUDIT_LOG=$(awk -F= '
+        /^[[:space:]]*log_file[[:space:]]*=/ {
+            value=$2
+            gsub(/^[[:space:]]+|[[:space:]]+$/, "", value)
+            print value
+        }
+    ' /etc/audit/auditd.conf | tail -1)
+
+else
+
+    AUDIT_LOG=""
+    warn "/etc/audit/auditd.conf does not exist"
+
+fi
+
+if [ -n "$AUDIT_LOG" ]; then
+
+    info "Audit log configured as:"
+    echo "$AUDIT_LOG"
+
+    AUDIT_DIR=$(dirname "$AUDIT_LOG")
+
+    if [ -d "$AUDIT_DIR" ]; then
+
+        pass "Audit log directory exists: $AUDIT_DIR"
+
+        ################################################################
+        # BACKUP AUDIT OWNERSHIP
+        ################################################################
+
+        find "$AUDIT_DIR" -maxdepth 1 -type f \
+            -printf '%u %g %m %p\n' \
+            > "$BACKUP_DIR/audit_permissions_before.txt" \
+            2>/dev/null
+
+        ################################################################
+        # CHANGE AUDIT LOG OWNERSHIP TO ROOT
+        ################################################################
+
+        info "Setting audit log files to root ownership..."
+
+        find "$AUDIT_DIR" \
+            -maxdepth 1 \
+            -type f \
+            -exec chown root {} \;
+
+        ################################################################
+        # VERIFY
+        ################################################################
+
+        BAD_AUDIT_OWNER=$(find "$AUDIT_DIR" \
+            -maxdepth 1 \
+            -type f \
+            ! -user root \
+            -print 2>/dev/null)
+
+        if [ -z "$BAD_AUDIT_OWNER" ]; then
+
+            pass "Audit log files are owned by root"
+
+        else
+
+            fail "Some audit log files are not owned by root"
+
+            echo "$BAD_AUDIT_OWNER"
+
+        fi
+
+    else
+
+        fail "Audit log directory does not exist: $AUDIT_DIR"
+
+    fi
+
+else
+
+    warn "Could not determine audit log location from auditd.conf"
+
+fi
+
+########################################################################
+# AUDIT TOOL OWNERSHIP
+########################################################################
+
+echo
+echo "------------------------------------------------------------"
+echo " AUDIT TOOL OWNERSHIP"
+echo "------------------------------------------------------------"
+
+info "Checking standard audit tools..."
+
+AUDIT_TOOLS=(
+    /sbin/auditctl
+    /sbin/auditd
+    /sbin/ausearch
+    /sbin/aureport
+    /sbin/autrace
+    /sbin/augenrules
+)
+
+for TOOL in "${AUDIT_TOOLS[@]}"
+do
+
+    if [ -e "$TOOL" ]; then
+
+        OWNER=$(stat -c '%U' "$TOOL")
+        GROUP=$(stat -c '%G' "$TOOL")
+        MODE=$(stat -c '%a' "$TOOL")
+
+        echo
+        echo "Tool: $TOOL"
+        echo "Owner: $OWNER"
+        echo "Group: $GROUP"
+        echo "Mode : $MODE"
+
+        ################################################################
+        # OWNER
+        ################################################################
+
+        if [ "$OWNER" != "root" ]; then
+
+            info "Changing owner to root..."
+
+            chown root "$TOOL"
+
+        fi
+
+        ################################################################
+        # GROUP
+        ################################################################
+
+        if [ "$GROUP" != "root" ]; then
+
+            info "Changing group to root..."
+
+            chown :root "$TOOL"
+
+        fi
+
+        ################################################################
+        # MODE
+        #
+        # The report requires 0755 or more restrictive.
+        #
+        ################################################################
+
+        PERM=$(stat -c '%a' "$TOOL")
+
+        if [ "$PERM" -gt 755 ] 2>/dev/null; then
+
+            info "Restricting permissions on $TOOL"
+
+            chmod 755 "$TOOL"
+
+        fi
+
+        ################################################################
+        # VERIFY
+        ################################################################
+
+        OWNER_AFTER=$(stat -c '%U' "$TOOL")
+        GROUP_AFTER=$(stat -c '%G' "$TOOL")
+        MODE_AFTER=$(stat -c '%a' "$TOOL")
+
+        if [ "$OWNER_AFTER" = "root" ]; then
+
+            pass "$TOOL owner is root"
+
+        else
+
+            fail "$TOOL owner is $OWNER_AFTER"
+
+        fi
+
+        if [ "$GROUP_AFTER" = "root" ]; then
+
+            pass "$TOOL group is root"
+
+        else
+
+            fail "$TOOL group is $GROUP_AFTER"
+
+        fi
+
+        if [ "$MODE_AFTER" -le 755 ] 2>/dev/null; then
+
+            pass "$TOOL permissions are 0755 or more restrictive"
+
+        else
+
+            fail "$TOOL permissions are $MODE_AFTER"
+
+        fi
+
+    else
+
+        warn "$TOOL does not exist on this system"
+
+    fi
+
+done
+
+########################################################################
+# SYSTEM COMMAND DIRECTORIES
+#
+# These were PASSING in the report.
+# Verify only — DO NOT modify them.
+########################################################################
+
+echo
+echo "============================================================"
+echo " SYSTEM COMMAND DIRECTORIES"
+echo "============================================================"
+
+COMMAND_DIRS=(
+    /usr/bin
+    /usr/sbin
+    /usr/local/bin
+    /usr/local/sbin
+)
+
+for DIR in "${COMMAND_DIRS[@]}"
+do
+
+    if [ -d "$DIR" ]; then
+
+        OWNER=$(stat -c '%U' "$DIR")
+        GROUP=$(stat -c '%G' "$DIR")
+        MODE=$(stat -c '%a' "$DIR")
+
+        echo
+        echo "$DIR"
+        echo "Owner: $OWNER"
+        echo "Group: $GROUP"
+        echo "Mode : $MODE"
+
+        if [ "$OWNER" = "root" ]; then
+
+            pass "$DIR is owned by root"
+
+        else
+
+            fail "$DIR is NOT owned by root"
+
+        fi
+
+        if [ "$GROUP" = "root" ]; then
+
+            pass "$DIR is group-owned by root"
+
+        else
+
+            fail "$DIR is NOT group-owned by root"
+
+        fi
+
+        if [ "$MODE" -le 755 ] 2>/dev/null; then
+
+            pass "$DIR mode is 0755 or more restrictive"
+
+        else
+
+            fail "$DIR mode is more permissive than 0755"
+
+        fi
+
+    else
+
+        warn "$DIR does not exist"
+
+    fi
+
+done
+
+########################################################################
+# LIBRARY DIRECTORIES
+#
+# IMPORTANT:
+# These checks were PASSING in the report.
+# VERIFY ONLY.
+########################################################################
+
+echo
+echo "============================================================"
+echo " LIBRARY DIRECTORIES"
+echo "============================================================"
+
+LIB_DIRS=(
+    /lib
+    /lib64
+    /usr/lib
+    /usr/lib64
+)
+
+for DIR in "${LIB_DIRS[@]}"
+do
+
+    if [ -d "$DIR" ]; then
+
+        OWNER=$(stat -c '%U' "$DIR")
+        GROUP=$(stat -c '%G' "$DIR")
+
+        echo
+        echo "$DIR"
+        echo "Owner: $OWNER"
+        echo "Group: $GROUP"
+
+        if [ "$OWNER" = "root" ]; then
+
+            pass "$DIR is owned by root"
+
+        else
+
+            fail "$DIR is NOT owned by root"
+
+        fi
+
+        if [ "$GROUP" = "root" ]; then
+
+            pass "$DIR is group-owned by root"
+
+        else
+
+            warn "$DIR group is $GROUP"
+
+        fi
+
+    else
+
+        warn "$DIR does not exist"
+
+    fi
+
+done
+
+########################################################################
+# WORLD-WRITABLE OPERATING SYSTEM LIBRARIES
+#
+# Verify only.
+########################################################################
+
+echo
+echo "============================================================"
+echo " WORLD-WRITABLE LIBRARY FILES"
+echo "============================================================"
+
+WORLD_WRITABLE_LIBS=$(find \
+    /lib \
+    /lib64 \
+    /usr/lib \
+    /usr/lib64 \
+    -type f \
+    \( -name '*.so' -o -name '*.so.*' \) \
+    -perm -0002 \
+    -print 2>/dev/null)
+
+if [ -z "$WORLD_WRITABLE_LIBS" ]; then
+
+    pass "No world-writable operating system library files found"
+
+else
+
+    fail "World-writable operating system library files found"
+
+    echo "$WORLD_WRITABLE_LIBS"
+
+fi
+
+########################################################################
+# AUDIT DIRECTORY
+########################################################################
+
+echo
+echo "============================================================"
+echo " /var/log/audit"
+echo "============================================================"
+
+if [ -d /var/log/audit ]; then
+
+    stat /var/log/audit
+
+    OWNER=$(stat -c '%U' /var/log/audit)
+    GROUP=$(stat -c '%G' /var/log/audit)
+
+    if [ "$OWNER" = "root" ]; then
+
+        pass "/var/log/audit is owned by root"
+
+    else
+
+        warn "/var/log/audit owner is $OWNER"
+
+    fi
+
+else
+
+    warn "/var/log/audit does not exist"
+
+fi
+
+########################################################################
+# SAVE FINAL INVENTORY
+########################################################################
+
+echo
+echo "------------------------------------------------------------"
+echo "Saving final permission inventory..."
+echo "------------------------------------------------------------"
+
+find /var/log -type f -printf '%m %u %g %p\n' \
+    > "$BACKUP_DIR/var_log_permissions_after.txt" 2>/dev/null
+
+pass "Saved final /var/log permission inventory"
+
+########################################################################
+# SUMMARY
+########################################################################
+
+echo
+echo "============================================================"
+echo " PART 4 SUMMARY"
+echo "============================================================"
+
+echo -e "${GREEN}PASS: $PASS_COUNT${NC}"
+echo -e "${RED}FAIL: $FAIL_COUNT${NC}"
+echo -e "${YELLOW}WARN: $WARN_COUNT${NC}"
+
+echo
+echo "Backup/inventory directory:"
+echo "$BACKUP_DIR"
+
+echo
+echo "============================================================"
+
+if [ "$FAIL_COUNT" -eq 0 ]; then
+
+    echo -e "${GREEN}PART 4 COMPLETED WITHOUT FAILURES${NC}"
+
+else
+
+    echo -e "${RED}PART 4 COMPLETED WITH $FAIL_COUNT FAILURE(S)${NC}"
+
+fi
+
+echo "============================================================"
+echo
